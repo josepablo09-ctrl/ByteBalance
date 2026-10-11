@@ -9,7 +9,10 @@ import (
 	"bytebalance/internal/domain"
 )
 
-const userA domain.ID = "11111111-1111-1111-1111-111111111111"
+var (
+	userA  = domain.MustParseID("11111111-1111-1111-1111-111111111111")
+	habitA = domain.MustParseID("33333333-3333-3333-3333-333333333333")
+)
 
 func TestNew(t *testing.T) {
 	tests := []struct {
@@ -72,18 +75,18 @@ func TestRecord(t *testing.T) {
 	}{
 		{
 			name:     "usa la fecha local del usuario",
-			habit:    Habit{ID: "h1", UserID: userA, IsActive: true},
+			habit:    Habit{ID: habitA, UserID: userA, IsActive: true},
 			count:    2,
 			wantDate: time.Date(2026, 10, 10, 0, 0, 0, 0, time.UTC),
 		},
 		{
 			name:     "cantidad cero se toma como 1",
-			habit:    Habit{ID: "h1", UserID: userA, IsActive: true},
+			habit:    Habit{ID: habitA, UserID: userA, IsActive: true},
 			wantDate: time.Date(2026, 10, 10, 0, 0, 0, 0, time.UTC),
 		},
-		{name: "hábito inactivo", habit: Habit{ID: "h1", UserID: userA}, wantErr: ErrInactive},
+		{name: "hábito inactivo", habit: Habit{ID: habitA, UserID: userA}, wantErr: ErrInactive},
 		{name: "hábito sin persistir", habit: Habit{UserID: userA, IsActive: true}, wantErr: domain.ErrInvalidInput},
-		{name: "cantidad negativa", habit: Habit{ID: "h1", UserID: userA, IsActive: true}, count: -1, wantErr: domain.ErrInvalidInput},
+		{name: "cantidad negativa", habit: Habit{ID: habitA, UserID: userA, IsActive: true}, count: -1, wantErr: domain.ErrInvalidInput},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

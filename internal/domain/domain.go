@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"uuid"
 )
 
 // Errores de dominio. La capa delivery los traduce a códigos HTTP con errors.Is.
@@ -18,13 +19,53 @@ var (
 	ErrConflict = errors.New("conflicto")
 )
 
-// ID identifica una entidad persistida. Es un UUID en su forma textual,
-// asignado por la base de datos al crear la entidad.
-type ID string
+// ID identifica una entidad persistida. Es un UUID asignado por la base de
+// datos al crear la entidad; el valor cero indica que aún no se ha persistido.
+type ID uuid.UUID
+
+// NewID genera un ID nuevo (UUIDv7, ordenable por fecha de creación).
+func NewID() ID {
+	return ID(uuid.NewV7())
+}
+
+// ParseID convierte la forma textual de un UUID en un ID.
+func ParseID(s string) (ID, error) {
+	u, err := uuid.Parse(s)
+	if err != nil {
+		return ID{}, fmt.Errorf("%w: id %q no es un UUID válido", ErrInvalidInput, s)
+	}
+	return ID(u), nil
+}
+
+// MustParseID es como ParseID pero entra en pánico si s no es válido.
+// Solo debe usarse con valores constantes (p. ej. en tests).
+func MustParseID(s string) ID {
+	return ID(uuid.MustParse(s))
+}
 
 // IsZero indica si el ID aún no ha sido asignado.
 func (id ID) IsZero() bool {
-	return id == ""
+	return id == ID{}
+}
+
+// String devuelve el UUID en su forma canónica (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx).
+func (id ID) String() string {
+	return uuid.UUID(id).String()
+}
+
+// MarshalText implementa encoding.TextMarshaler (el ID se serializa como texto en JSON).
+func (id ID) MarshalText() ([]byte, error) {
+	return uuid.UUID(id).MarshalText()
+}
+
+// UnmarshalText implementa encoding.TextUnmarshaler.
+func (id *ID) UnmarshalText(b []byte) error {
+	var u uuid.UUID
+	if err := u.UnmarshalText(b); err != nil {
+		return fmt.Errorf("%w: id no es un UUID válido", ErrInvalidInput)
+	}
+	*id = ID(u)
+	return nil
 }
 
 // Currency es un código de moneda ISO 4217 en mayúsculas (p. ej. "USD").

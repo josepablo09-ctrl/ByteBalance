@@ -9,9 +9,9 @@ import (
 	"bytebalance/internal/domain"
 )
 
-const (
-	userA domain.ID = "11111111-1111-1111-1111-111111111111"
-	userB domain.ID = "22222222-2222-2222-2222-222222222222"
+var (
+	userA = domain.MustParseID("11111111-1111-1111-1111-111111111111")
+	userB = domain.MustParseID("22222222-2222-2222-2222-222222222222")
 )
 
 func TestMoneyValidate(t *testing.T) {
@@ -77,7 +77,7 @@ func TestNewCategory(t *testing.T) {
 func TestNewTransaction(t *testing.T) {
 	now := time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
 	deleted := now
-	food := &Category{ID: "c1", UserID: userA, Name: "Comida", Type: Expense}
+	food := &Category{ID: domain.NewID(), UserID: userA, Name: "Comida", Type: Expense}
 
 	tests := []struct {
 		name    string
@@ -86,25 +86,25 @@ func TestNewTransaction(t *testing.T) {
 	}{
 		{name: "válida sin categoría", modify: func(*TransactionParams) {}},
 		{name: "válida con categoría", modify: func(p *TransactionParams) { p.Category = food }},
-		{name: "sin usuario", modify: func(p *TransactionParams) { p.UserID = "" }, wantErr: domain.ErrInvalidInput},
+		{name: "sin usuario", modify: func(p *TransactionParams) { p.UserID = domain.ID{} }, wantErr: domain.ErrInvalidInput},
 		{name: "tipo inválido", modify: func(p *TransactionParams) { p.Type = "x" }, wantErr: domain.ErrInvalidInput},
 		{name: "monto cero", modify: func(p *TransactionParams) { p.Amount.Cents = 0 }, wantErr: domain.ErrInvalidInput},
 		{name: "sin fecha", modify: func(p *TransactionParams) { p.OccurredAt = time.Time{} }, wantErr: domain.ErrInvalidInput},
 		{name: "descripción larga", modify: func(p *TransactionParams) { p.Description = strings.Repeat("a", 256) }, wantErr: domain.ErrInvalidInput},
 		{
 			name:    "categoría de otro tipo",
-			modify:  func(p *TransactionParams) { p.Category = &Category{ID: "c2", UserID: userA, Type: Income} },
+			modify:  func(p *TransactionParams) { p.Category = &Category{ID: domain.NewID(), UserID: userA, Type: Income} },
 			wantErr: domain.ErrInvalidInput,
 		},
 		{
 			name:    "categoría de otro usuario",
-			modify:  func(p *TransactionParams) { p.Category = &Category{ID: "c3", UserID: userB, Type: Expense} },
+			modify:  func(p *TransactionParams) { p.Category = &Category{ID: domain.NewID(), UserID: userB, Type: Expense} },
 			wantErr: domain.ErrNotFound,
 		},
 		{
 			name: "categoría eliminada",
 			modify: func(p *TransactionParams) {
-				p.Category = &Category{ID: "c4", UserID: userA, Type: Expense, DeletedAt: &deleted}
+				p.Category = &Category{ID: domain.NewID(), UserID: userA, Type: Expense, DeletedAt: &deleted}
 			},
 			wantErr: domain.ErrInvalidInput,
 		},
