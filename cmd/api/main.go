@@ -16,17 +16,22 @@ import (
 	// funcione en imágenes mínimas (distroless/scratch) sin tzdata del sistema.
 	_ "time/tzdata"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"bytebalance/internal/config"
 	httpdelivery "bytebalance/internal/delivery/http"
 	"bytebalance/internal/domain/finance"
 	"bytebalance/internal/domain/habit"
 	"bytebalance/internal/domain/user"
 	"bytebalance/internal/repository/postgres"
+	"bytebalance/internal/security"
+	"bytebalance/internal/usecase"
 )
 
 const (
 	dbConnectTimeout = 10 * time.Second
 	shutdownTimeout  = 10 * time.Second
+	accessTokenTTL   = 24 * time.Hour
 )
 
 // repositories agrupa las implementaciones de persistencia que se inyectarán
@@ -49,18 +54,28 @@ func newRepositories(db postgres.DBTX) repositories {
 	}
 }
 
-// app reúne las dependencias construidas en el arranque.
-type app struct {
-	db httpdelivery.Pinger
-	// repos se inyectará en los casos de uso a medida que se implementen.
-	repos repositories
-}
+// newHandler construye los casos de uso sobre los repositorios y los expone
+// mediante el router HTTP.
+func newHandler(cfg config.Config, pool *pgxpool.Pool) (http.Handler, error) {
+	repos := newRepositories(pool)
 
-// routes registra los endpoints HTTP de la API.
-func (a *app) routes() http.Handler {
-	mux := http.NewServeMux()
-	mux.Handle("GET /healthz", httpdelivery.Health(a.db))
-	return mux
+	hasher, err := security.NewBcryptHasher(security.DefaultBcryptCost)
+	if err != nil {
+		return nil, fmt.Errorf("crear hasher de contraseñas: %w", err)
+	}
+	tokens, err := security.NewJWT([]byte(cfg.JWTSecret), accessTokenTTL, time.Now)
+	if err != nil {
+		return nil, fmt.Errorf("crear emisor de tokens: %w", err)
+	}
+
+	return httpdelivery.NewRouter(httpdelivery.Services{
+		Users:   usecase.NewUserService(repos.users, hasher),
+		Auth:    usecase.NewAuthService(repos.users, hasher, tokens),
+		Finance: usecase.NewFinanceService(repos.categories, repos.transactions, repos.users, time.Now),
+		Habits:  usecase.NewHabitService(repos.habits, repos.habitLogs, repos.users, time.Now),
+		Tokens:  tokens,
+		DB:      pool,
+	}), nil
 }
 
 func main() {
@@ -89,11 +104,14 @@ func run() error {
 	}
 	defer pool.Close()
 
-	a := &app{db: pool, repos: newRepositories(pool)}
+	handler, err := newHandler(cfg, pool)
+	if err != nil {
+		return err
+	}
 
 	srv := &http.Server{
 		Addr:              cfg.Addr(),
-		Handler:           a.routes(),
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,
