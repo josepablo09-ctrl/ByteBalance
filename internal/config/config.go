@@ -22,6 +22,8 @@ const (
 	defaultEnv  = EnvDevelopment
 	defaultPort = 8080
 	dotEnvFile  = ".env"
+	// minJWTSecretLen coincide con security.MinJWTSecretLen (256 bits para HS256).
+	minJWTSecretLen = 32
 )
 
 // sslmodes que cifran la conexión; obligatorios fuera de desarrollo.
@@ -36,6 +38,9 @@ type Config struct {
 	// DatabaseURL es la cadena de conexión a PostgreSQL (DATABASE_URL). Contiene
 	// credenciales: nunca debe registrarse en logs.
 	DatabaseURL string
+	// JWTSecret es la clave HS256 con la que se firman los tokens de acceso
+	// (JWT_SECRET). Es un secreto: nunca debe registrarse en logs.
+	JWTSecret string
 }
 
 // IsDevelopment indica si la aplicación corre en el entorno local de desarrollo.
@@ -84,7 +89,12 @@ func parse(lookup func(string) (string, bool)) (Config, error) {
 		return "" // una variable no definida equivale a vacía
 	}
 	var errs []error
-	cfg := Config{Env: get("APP_ENV"), Port: defaultPort, DatabaseURL: get("DATABASE_URL")}
+	cfg := Config{
+		Env:         get("APP_ENV"),
+		Port:        defaultPort,
+		DatabaseURL: get("DATABASE_URL"),
+		JWTSecret:   get("JWT_SECRET"),
+	}
 
 	if cfg.Env == "" {
 		cfg.Env = defaultEnv
@@ -103,6 +113,11 @@ func parse(lookup func(string) (string, bool)) (Config, error) {
 
 	if err := validateDatabaseURL(cfg.DatabaseURL, cfg.Env); err != nil {
 		errs = append(errs, err)
+	}
+
+	// No se incluye el valor en el mensaje: es un secreto.
+	if len(cfg.JWTSecret) < minJWTSecretLen {
+		errs = append(errs, fmt.Errorf("JWT_SECRET es obligatoria y debe tener al menos %d bytes (generar con: openssl rand -base64 48)", minJWTSecretLen))
 	}
 
 	if err := errors.Join(errs...); err != nil {

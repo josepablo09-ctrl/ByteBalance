@@ -8,7 +8,10 @@ import (
 	"testing"
 )
 
-const localDB = "postgres://user:password@localhost:5432/bytebalance?sslmode=disable"
+const (
+	localDB   = "postgres://user:password@localhost:5432/bytebalance?sslmode=disable"
+	jwtSecret = "0123456789abcdef0123456789abcdef"
+)
 
 func lookupFrom(vars map[string]string) func(string) (string, bool) {
 	return func(key string) (string, bool) {
@@ -26,8 +29,8 @@ func TestParse(t *testing.T) {
 	}{
 		{
 			name: "valores por defecto",
-			vars: map[string]string{"DATABASE_URL": localDB},
-			want: Config{Env: EnvDevelopment, Port: 8080, DatabaseURL: localDB},
+			vars: map[string]string{"DATABASE_URL": localDB, "JWT_SECRET": jwtSecret},
+			want: Config{Env: EnvDevelopment, Port: 8080, DatabaseURL: localDB, JWTSecret: jwtSecret},
 		},
 		{
 			name: "producción con TLS",
@@ -35,8 +38,9 @@ func TestParse(t *testing.T) {
 				"APP_ENV":      "production",
 				"APP_PORT":     "9090",
 				"DATABASE_URL": "postgres://app:secreto@db.internal:5432/bytebalance?sslmode=verify-full",
+				"JWT_SECRET":   jwtSecret,
 			},
-			want: Config{Env: EnvProduction, Port: 9090, DatabaseURL: "postgres://app:secreto@db.internal:5432/bytebalance?sslmode=verify-full"},
+			want: Config{Env: EnvProduction, Port: 9090, DatabaseURL: "postgres://app:secreto@db.internal:5432/bytebalance?sslmode=verify-full", JWTSecret: jwtSecret},
 		},
 		{
 			name:    "falta DATABASE_URL",
@@ -56,12 +60,17 @@ func TestParse(t *testing.T) {
 		{
 			name:    "reporta todos los errores a la vez",
 			vars:    map[string]string{"APP_ENV": "qa", "APP_PORT": "70000"},
-			wantErr: []string{"APP_ENV", "APP_PORT", "DATABASE_URL"},
+			wantErr: []string{"APP_ENV", "APP_PORT", "DATABASE_URL", "JWT_SECRET"},
 		},
 		{
 			name:    "puerto no numérico",
-			vars:    map[string]string{"APP_PORT": "http", "DATABASE_URL": localDB},
+			vars:    map[string]string{"APP_PORT": "http", "DATABASE_URL": localDB, "JWT_SECRET": jwtSecret},
 			wantErr: []string{"APP_PORT"},
+		},
+		{
+			name:    "JWT_SECRET demasiado corta",
+			vars:    map[string]string{"DATABASE_URL": localDB, "JWT_SECRET": "corta"},
+			wantErr: []string{"JWT_SECRET", "32 bytes"},
 		},
 	}
 	for _, tt := range tests {
@@ -88,16 +97,19 @@ func TestParse(t *testing.T) {
 	}
 }
 
-func TestParseNeverLeaksDatabasePassword(t *testing.T) {
+func TestParseNeverLeaksSecrets(t *testing.T) {
 	_, err := parse(lookupFrom(map[string]string{
 		"APP_ENV":      "production",
 		"DATABASE_URL": "postgres://app:superSecreta@db.internal/bytebalance?sslmode=disable",
+		"JWT_SECRET":   "jwtSecretoCorto",
 	}))
 	if err == nil {
-		t.Fatal("se esperaba error por falta de TLS")
+		t.Fatal("se esperaba error por falta de TLS y secreto corto")
 	}
-	if strings.Contains(err.Error(), "superSecreta") {
-		t.Fatalf("el error expone la contraseña: %v", err)
+	for _, secret := range []string{"superSecreta", "jwtSecretoCorto"} {
+		if strings.Contains(err.Error(), secret) {
+			t.Fatalf("el error expone un secreto (%s): %v", secret, err)
+		}
 	}
 }
 
@@ -161,7 +173,7 @@ func TestReadDotEnvMissingFile(t *testing.T) {
 
 func TestLoadEnvironmentOverridesDotEnv(t *testing.T) {
 	dir := t.TempDir()
-	content := "APP_PORT=7000\nDATABASE_URL=" + localDB + "\n"
+	content := "APP_PORT=7000\nDATABASE_URL=" + localDB + "\nJWT_SECRET=" + jwtSecret + "\n"
 	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(content), 0o600); err != nil {
 		t.Fatalf("escribir .env: %v", err)
 	}
