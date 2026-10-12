@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -81,13 +82,15 @@ func TestHabitRepository(t *testing.T) {
 				if err != nil {
 					t.Fatalf("ListByUser: %v", err)
 				}
-				if len(got) != len(tt.want) {
-					t.Fatalf("ListByUser devolvió %d hábitos, se esperaban %d", len(got), len(tt.want))
+				// Dentro de la transacción del test NOW() es constante, así que todos
+				// los hábitos comparten created_at y el orden entre ellos no está
+				// definido: se compara el conjunto de IDs.
+				gotIDs := make([]domain.ID, 0, len(got))
+				for _, h := range got {
+					gotIDs = append(gotIDs, h.ID)
 				}
-				for i := range got {
-					if got[i].ID != tt.want[i] {
-						t.Errorf("posición %d = %v, se esperaba %v", i, got[i].ID, tt.want[i])
-					}
+				if !sameIDs(gotIDs, tt.want) {
+					t.Errorf("ListByUser = %v, se esperaban %v (en cualquier orden)", gotIDs, tt.want)
 				}
 			})
 		}
@@ -205,4 +208,17 @@ func TestHabitLogRepository(t *testing.T) {
 			t.Errorf("segundo Delete error = %v, se esperaba ErrNotFound", err)
 		}
 	})
+}
+
+// sameIDs indica si a y b contienen los mismos IDs (sin duplicados), en cualquier orden.
+func sameIDs(a, b []domain.ID) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for _, id := range b {
+		if !slices.Contains(a, id) {
+			return false
+		}
+	}
+	return true
 }
