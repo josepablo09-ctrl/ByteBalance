@@ -3,7 +3,6 @@ package http
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"time"
@@ -34,13 +33,4 @@ func Health(db Pinger) http.Handler {
 		}
 		writeJSON(w, status, body)
 	})
-}
-
-// writeJSON serializa body como respuesta JSON con el código status.
-func writeJSON(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(body); err != nil {
-		slog.Error("escribir respuesta json", "error", err)
-	}
 }
