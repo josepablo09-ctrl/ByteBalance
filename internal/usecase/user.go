@@ -11,10 +11,12 @@ import (
 	"bytebalance/internal/domain/user"
 )
 
-// Política de contraseñas (NIST SP 800-63B): solo longitud, sin reglas de composición.
+// Política de contraseñas (NIST SP 800-63B): solo longitud, sin reglas de
+// composición. El máximo se mide en bytes porque los algoritmos de hash como
+// bcrypt no admiten más de 72 bytes; un carácter no ASCII ocupa varios.
 const (
-	minPasswordLen = 8
-	maxPasswordLen = 128
+	minPasswordLen   = 8
+	maxPasswordBytes = 72
 )
 
 const defaultCurrency domain.Currency = "USD"
@@ -53,9 +55,9 @@ type RegisterInput struct {
 
 // Register crea un usuario nuevo. Devuelve ErrEmailTaken si el email ya está en uso.
 func (s *UserService) Register(ctx context.Context, in RegisterInput) (*user.User, error) {
-	if n := utf8.RuneCountInString(in.Password); n < minPasswordLen || n > maxPasswordLen {
-		return nil, fmt.Errorf("registrar usuario: %w: la contraseña debe tener entre %d y %d caracteres",
-			domain.ErrInvalidInput, minPasswordLen, maxPasswordLen)
+	if utf8.RuneCountInString(in.Password) < minPasswordLen || len(in.Password) > maxPasswordBytes {
+		return nil, fmt.Errorf("registrar usuario: %w: la contraseña debe tener al menos %d caracteres y no superar %d bytes",
+			domain.ErrInvalidInput, minPasswordLen, maxPasswordBytes)
 	}
 	currency := defaultCurrency
 	if strings.TrimSpace(in.DefaultCurrency) != "" {
