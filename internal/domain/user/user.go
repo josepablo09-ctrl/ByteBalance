@@ -80,8 +80,9 @@ func (u *User) Validate() error {
 	if !u.DefaultCurrency.Valid() {
 		return fmt.Errorf("%w: moneda por defecto %q inválida", domain.ErrInvalidInput, u.DefaultCurrency)
 	}
-	if len(u.Timezone) > maxTimezoneLen {
-		return fmt.Errorf("%w: zona horaria demasiado larga", domain.ErrInvalidInput)
+	// time.LoadLocation("") devuelve UTC sin error, por eso el vacío se rechaza aparte.
+	if u.Timezone == "" || len(u.Timezone) > maxTimezoneLen {
+		return fmt.Errorf("%w: la zona horaria es obligatoria y admite hasta %d caracteres", domain.ErrInvalidInput, maxTimezoneLen)
 	}
 	if _, err := time.LoadLocation(u.Timezone); err != nil {
 		return fmt.Errorf("%w: zona horaria %q desconocida", domain.ErrInvalidInput, u.Timezone)

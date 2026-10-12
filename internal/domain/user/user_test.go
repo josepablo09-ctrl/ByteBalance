@@ -35,6 +35,7 @@ func TestNew(t *testing.T) {
 		{name: "nombre demasiado largo", modify: func(p *Params) { p.FullName = strings.Repeat("ñ", 151) }, wantErr: true},
 		{name: "moneda inválida", modify: func(p *Params) { p.DefaultCurrency = "usd" }, wantErr: true},
 		{name: "zona horaria desconocida", modify: func(p *Params) { p.Timezone = "Marte/Olympus" }, wantErr: true},
+		{name: "zona horaria demasiado larga", modify: func(p *Params) { p.Timezone = strings.Repeat("a", 65) }, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -80,5 +81,16 @@ func TestLinkTelegram(t *testing.T) {
 	u.UnlinkTelegram()
 	if u.HasTelegram() {
 		t.Fatalf("UnlinkTelegram() no eliminó la vinculación")
+	}
+}
+
+func TestValidateRejectsEmptyTimezone(t *testing.T) {
+	u, err := New(validParams())
+	if err != nil {
+		t.Fatalf("New() error inesperado: %v", err)
+	}
+	u.Timezone = ""
+	if err := u.Validate(); !errors.Is(err, domain.ErrInvalidInput) {
+		t.Fatalf("Validate() con zona horaria vacía error = %v, se esperaba ErrInvalidInput", err)
 	}
 }
