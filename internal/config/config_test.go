@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -83,6 +84,48 @@ func TestParse(t *testing.T) {
 			wantErr: []string{"TRUSTED_PROXY_HOPS"},
 		},
 		{
+			name: "orígenes CORS en desarrollo",
+			vars: map[string]string{"DATABASE_URL": localDB, "JWT_SECRET": jwtSecret, "CORS_ALLOWED_ORIGINS": " http://localhost:5173, HTTPS://App.Example.com ,,http://localhost:5173"},
+			want: Config{Env: EnvDevelopment, Port: 8080, DatabaseURL: localDB, JWTSecret: jwtSecret,
+				CORSAllowedOrigins: []string{"http://localhost:5173", "https://app.example.com"}},
+		},
+		{
+			name: "orígenes CORS en producción",
+			vars: map[string]string{
+				"APP_ENV":              "production",
+				"DATABASE_URL":         "postgres://app:secreto@db.internal:5432/bytebalance?sslmode=require",
+				"JWT_SECRET":           jwtSecret,
+				"CORS_ALLOWED_ORIGINS": "https://app.bytebalance.com",
+			},
+			want: Config{Env: EnvProduction, Port: 8080, DatabaseURL: "postgres://app:secreto@db.internal:5432/bytebalance?sslmode=require",
+				JWTSecret: jwtSecret, CORSAllowedOrigins: []string{"https://app.bytebalance.com"}},
+		},
+		{
+			name: "origen http en producción",
+			vars: map[string]string{
+				"APP_ENV":              "production",
+				"DATABASE_URL":         "postgres://app:secreto@db.internal:5432/bytebalance?sslmode=require",
+				"JWT_SECRET":           jwtSecret,
+				"CORS_ALLOWED_ORIGINS": "http://app.bytebalance.com",
+			},
+			wantErr: []string{"CORS_ALLOWED_ORIGINS", "https"},
+		},
+		{
+			name:    "origen comodín",
+			vars:    map[string]string{"DATABASE_URL": localDB, "JWT_SECRET": jwtSecret, "CORS_ALLOWED_ORIGINS": "*"},
+			wantErr: []string{"CORS_ALLOWED_ORIGINS"},
+		},
+		{
+			name:    "origen con ruta",
+			vars:    map[string]string{"DATABASE_URL": localDB, "JWT_SECRET": jwtSecret, "CORS_ALLOWED_ORIGINS": "http://localhost:5173/app"},
+			wantErr: []string{"CORS_ALLOWED_ORIGINS"},
+		},
+		{
+			name:    "origen sin esquema",
+			vars:    map[string]string{"DATABASE_URL": localDB, "JWT_SECRET": jwtSecret, "CORS_ALLOWED_ORIGINS": "localhost:5173"},
+			wantErr: []string{"CORS_ALLOWED_ORIGINS"},
+		},
+		{
 			name:    "TRUSTED_PROXY_HOPS no numérico",
 			vars:    map[string]string{"DATABASE_URL": localDB, "JWT_SECRET": jwtSecret, "TRUSTED_PROXY_HOPS": "alb"},
 			wantErr: []string{"TRUSTED_PROXY_HOPS"},
@@ -105,7 +148,7 @@ func TestParse(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parse() error inesperado: %v", err)
 			}
-			if got != tt.want {
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("parse() = %+v, se esperaba %+v", got, tt.want)
 			}
 		})

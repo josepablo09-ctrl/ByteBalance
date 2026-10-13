@@ -9,6 +9,7 @@ import (
 	"os"
 	"slices"
 	"strconv"
+	"strings"
 )
 
 // Entornos de ejecución admitidos en APP_ENV.
@@ -48,6 +49,10 @@ type Config struct {
 	// entrada de X-Forwarded-For es la IP real del cliente. Por defecto 0: la
 	// cabecera se ignora.
 	TrustedProxyHops int
+	// CORSAllowedOrigins son los orígenes del frontend que pueden llamar a la
+	// API desde el navegador (CORS_ALLOWED_ORIGINS, separados por comas). Vacío
+	// desactiva CORS: solo se admiten peticiones del mismo origen.
+	CORSAllowedOrigins []string
 }
 
 // IsDevelopment indica si la aplicación corre en el entorno local de desarrollo.
@@ -130,6 +135,12 @@ func parse(lookup func(string) (string, bool)) (Config, error) {
 		errs = append(errs, err)
 	}
 
+	origins, err := parseOrigins(get("CORS_ALLOWED_ORIGINS"), cfg.Env)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	cfg.CORSAllowedOrigins = origins
+
 	// No se incluye el valor en el mensaje: es un secreto.
 	if len(cfg.JWTSecret) < minJWTSecretLen {
 		errs = append(errs, fmt.Errorf("JWT_SECRET es obligatoria y debe tener al menos %d bytes (generar con: openssl rand -base64 48)", minJWTSecretLen))
@@ -139,6 +150,32 @@ func parse(lookup func(string) (string, bool)) (Config, error) {
 		return Config{}, fmt.Errorf("configuración inválida:\n%w", err)
 	}
 	return cfg, nil
+}
+
+// parseOrigins interpreta una lista de orígenes separados por comas. Cada uno
+// debe ser exactamente esquema://host[:puerto], sin ruta ni comodines, porque
+// el navegador envía la cabecera Origin en esa forma y se compara literalmente.
+// Fuera de desarrollo solo se admite https.
+func parseOrigins(raw, env string) ([]string, error) {
+	var origins []string
+	for _, item := range strings.Split(raw, ",") {
+		origin := strings.ToLower(strings.TrimSpace(item))
+		if origin == "" {
+			continue
+		}
+		u, err := url.Parse(origin)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" ||
+			u.User != nil || origin != u.Scheme+"://"+u.Host {
+			return nil, fmt.Errorf("CORS_ALLOWED_ORIGINS: %q no es un origen válido (usar esquema://host[:puerto], sin ruta ni \"*\")", item)
+		}
+		if env != EnvDevelopment && u.Scheme != "https" {
+			return nil, fmt.Errorf("CORS_ALLOWED_ORIGINS: %q debe usar https en %s", item, env)
+		}
+		if !slices.Contains(origins, origin) {
+			origins = append(origins, origin)
+		}
+	}
+	return origins, nil
 }
 
 // validateDatabaseURL comprueba DATABASE_URL sin incluir su valor en los

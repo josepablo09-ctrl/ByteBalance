@@ -51,6 +51,9 @@ type Services struct {
 
 // Options configura el comportamiento transversal del router.
 type Options struct {
+	// AllowedOrigins son los orígenes (esquema://host[:puerto]) que pueden
+	// llamar a la API desde el navegador. Vacío desactiva CORS.
+	AllowedOrigins []string
 	// TrustedProxyHops es el número de proxies de confianza delante de la API
 	// (p. ej. 1 detrás de un ALB). Con 0 se ignora X-Forwarded-For y la IP del
 	// cliente es la de la conexión.
@@ -86,7 +89,7 @@ func NewRouter(s Services, opts Options) http.Handler {
 	mux.Handle("POST /api/v1/habits", protected(a.createHabit))
 	mux.Handle("POST /api/v1/habits/{id}/logs", protected(a.logCompletion))
 
-	return recoverPanics(mux)
+	return recoverPanics(cors(opts.AllowedOrigins, mux))
 }
 
 // recoverPanics convierte un panic en un handler en una respuesta 500 en lugar

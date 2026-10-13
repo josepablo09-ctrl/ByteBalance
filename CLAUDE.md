@@ -123,6 +123,7 @@ Variables esperadas (ver `.env.example`):
 APP_ENV=development
 APP_PORT=8080
 TRUSTED_PROXY_HOPS=0             # Proxies de confianza delante de la API (1 detrás de un ALB)
+CORS_ALLOWED_ORIGINS=http://localhost:5173  # Orígenes del frontend, separados por comas (https fuera de local)
 POSTGRES_USER=user               # Solo para docker-compose (PostgreSQL local)
 POSTGRES_PASSWORD=password
 POSTGRES_DB=bytebalance

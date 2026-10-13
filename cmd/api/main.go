@@ -76,6 +76,7 @@ func newHandler(cfg config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 		Tokens:  tokens,
 		DB:      pool,
 	}, httpdelivery.Options{
+		AllowedOrigins:   cfg.CORSAllowedOrigins,
 		TrustedProxyHops: cfg.TrustedProxyHops,
 	}), nil
 }
