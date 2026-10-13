@@ -135,6 +135,12 @@ TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
 ```
 
+Frontend (`frontend/.env`, ver `frontend/.env.example`). Toda variable `VITE_*` se incrusta en el bundle público del navegador: **nunca** contiene secretos.
+
+```
+VITE_API_URL=http://localhost:8080/api/v1   # URL base de la API REST
+```
+
 ---
 
 ## 5. Comandos Frecuentes

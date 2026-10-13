@@ -1,2 +1,3 @@
-# Go exige LF (gofmt); evita que core.autocrlf convierta los .go a CRLF en Windows.
-*.go text eol=lf
+# Todos los archivos de texto usan LF: gofmt y Prettier lo exigen, y así
+# core.autocrlf no los convierte a CRLF en Windows. Git detecta los binarios.
+* text=auto eol=lf

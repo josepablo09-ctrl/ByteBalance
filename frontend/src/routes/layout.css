@@ -1,0 +1,15 @@
+@import 'tailwindcss';
+
+@layer base {
+	:root {
+		color-scheme: dark;
+	}
+
+	html {
+		@apply bg-zinc-950 text-zinc-100 antialiased;
+	}
+
+	::selection {
+		@apply bg-emerald-500/30 text-zinc-50;
+	}
+}
