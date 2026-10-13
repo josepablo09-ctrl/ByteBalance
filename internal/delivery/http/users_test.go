@@ -157,3 +157,48 @@ func TestUpdatePreferences(t *testing.T) {
 		})
 	}
 }
+
+func TestProfile(t *testing.T) {
+	tests := []struct {
+		name          string
+		authenticated bool
+		profileFn     func(domain.ID) (*user.User, error)
+		wantStatus    int
+	}{
+		{
+			name:          "usuario del token",
+			authenticated: true,
+			profileFn: func(id domain.ID) (*user.User, error) {
+				if id != testUserID {
+					t.Errorf("userID = %v, se esperaba el del token", id)
+				}
+				return sampleUser(), nil
+			},
+			wantStatus: http.StatusOK,
+		},
+		{name: "sin token", wantStatus: http.StatusUnauthorized},
+		{
+			name:          "usuario eliminado",
+			authenticated: true,
+			profileFn:     func(domain.ID) (*user.User, error) { return nil, domain.ErrNotFound },
+			wantStatus:    http.StatusNotFound,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestRouter(Services{Users: stubUsers{profile: tt.profileFn}})
+			rec := do(h, http.MethodGet, "/api/v1/users/me", "", tt.authenticated)
+			expectStatus(t, rec, tt.wantStatus)
+			if tt.wantStatus != http.StatusOK {
+				return
+			}
+			body := decodeJSONBody(t, rec)
+			if body["id"] != testUserID.String() || body["email"] != "ana@example.com" || body["timezone"] != "America/Costa_Rica" {
+				t.Errorf("respuesta = %v", body)
+			}
+			if strings.Contains(rec.Body.String(), "hash") {
+				t.Errorf("la respuesta expone el hash de la contraseña: %s", rec.Body.String())
+			}
+		})
+	}
+}

@@ -39,7 +39,15 @@ func (stubTokens) Verify(token string) (domain.ID, error) {
 
 type stubUsers struct {
 	register          func(usecase.RegisterInput) (*user.User, error)
+	profile           func(domain.ID) (*user.User, error)
 	updatePreferences func(domain.ID, usecase.PreferencesInput) (*user.User, error)
+}
+
+func (s stubUsers) Profile(_ context.Context, id domain.ID) (*user.User, error) {
+	if s.profile == nil {
+		return nil, errNotStubbed
+	}
+	return s.profile(id)
 }
 
 func (s stubUsers) Register(_ context.Context, in usecase.RegisterInput) (*user.User, error) {
@@ -112,7 +120,23 @@ func (s stubFinance) Balance(_ context.Context, id domain.ID, from, to time.Time
 
 type stubHabits struct {
 	createHabit   func(domain.ID, usecase.CreateHabitInput) (*habit.Habit, error)
+	listHabits    func(domain.ID, bool) ([]habit.Habit, error)
+	listLogs      func(domain.ID, domain.ID, time.Time, time.Time) ([]habit.Log, error)
 	logCompletion func(domain.ID, domain.ID, usecase.LogCompletionInput) (*habit.Log, error)
+}
+
+func (s stubHabits) ListHabits(_ context.Context, id domain.ID, activeOnly bool) ([]habit.Habit, error) {
+	if s.listHabits == nil {
+		return nil, errNotStubbed
+	}
+	return s.listHabits(id, activeOnly)
+}
+
+func (s stubHabits) ListLogs(_ context.Context, userID, habitID domain.ID, from, to time.Time) ([]habit.Log, error) {
+	if s.listLogs == nil {
+		return nil, errNotStubbed
+	}
+	return s.listLogs(userID, habitID, from, to)
 }
 
 func (s stubHabits) CreateHabit(_ context.Context, id domain.ID, in usecase.CreateHabitInput) (*habit.Habit, error) {

@@ -3,6 +3,7 @@ package http
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -133,6 +134,130 @@ func TestLogCompletion(t *testing.T) {
 			if tt.wantDate != "" {
 				if body := decodeJSONBody(t, rec); body["date"] != tt.wantDate {
 					t.Errorf("date = %v, se esperaba %s", body["date"], tt.wantDate)
+				}
+			}
+		})
+	}
+}
+
+func TestListHabits(t *testing.T) {
+	tests := []struct {
+		name           string
+		query          string
+		wantStatus     int
+		wantActiveOnly bool
+	}{
+		{name: "todos", wantStatus: http.StatusOK},
+		{name: "solo activos", query: "?active=true", wantStatus: http.StatusOK, wantActiveOnly: true},
+		{name: "active inválido", query: "?active=quizas", wantStatus: http.StatusBadRequest},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			listFn := func(id domain.ID, activeOnly bool) ([]habit.Habit, error) {
+				if id != testUserID || activeOnly != tt.wantActiveOnly {
+					t.Errorf("ListHabits(%v, %v)", id, activeOnly)
+				}
+				return []habit.Habit{
+					{ID: domain.NewID(), UserID: id, Name: "Leer", Frequency: habit.Daily, TargetCount: 1, IsActive: true},
+					{ID: domain.NewID(), UserID: id, Name: "Correr", Frequency: habit.Weekly, TargetCount: 3, ReminderTime: &habit.TimeOfDay{Hour: 6, Minute: 30}},
+				}, nil
+			}
+			h := newTestRouter(Services{Habits: stubHabits{listHabits: listFn}})
+			rec := do(h, http.MethodGet, "/api/v1/habits"+tt.query, "", true)
+			expectStatus(t, rec, tt.wantStatus)
+			if tt.wantStatus != http.StatusOK {
+				return
+			}
+			habits, ok := decodeJSONBody(t, rec)["habits"].([]any)
+			if !ok || len(habits) != 2 {
+				t.Fatalf("habits = %v", rec.Body.String())
+			}
+			if second := habits[1].(map[string]any); second["reminder_time"] != "06:30" || second["is_active"] != false {
+				t.Errorf("segundo hábito = %v", second)
+			}
+		})
+	}
+}
+
+func TestListHabitsEmptyIsArray(t *testing.T) {
+	h := newTestRouter(Services{Habits: stubHabits{listHabits: func(domain.ID, bool) ([]habit.Habit, error) { return nil, nil }}})
+	rec := do(h, http.MethodGet, "/api/v1/habits", "", true)
+	expectStatus(t, rec, http.StatusOK)
+	if got := strings.TrimSpace(rec.Body.String()); got != `{"habits":[]}` {
+		t.Errorf("body = %s, se esperaba una lista vacía", got)
+	}
+}
+
+func TestListLogs(t *testing.T) {
+	habitID := domain.NewID()
+	path := "/api/v1/habits/" + habitID.String() + "/logs"
+	date := func(m time.Month, d int) time.Time { return time.Date(2026, m, d, 0, 0, 0, 0, time.UTC) }
+
+	tests := []struct {
+		name       string
+		target     string
+		listFn     func(domain.ID, domain.ID, time.Time, time.Time) ([]habit.Log, error)
+		wantStatus int
+	}{
+		{
+			name:   "rango explícito",
+			target: path + "?from=2026-10-01&to=2026-10-11",
+			listFn: func(userID, gotHabit domain.ID, from, to time.Time) ([]habit.Log, error) {
+				if userID != testUserID || gotHabit != habitID || !from.Equal(date(10, 1)) || !to.Equal(date(10, 11)) {
+					t.Errorf("ListLogs(%v, %v, %v, %v)", userID, gotHabit, from, to)
+				}
+				return []habit.Log{
+					{ID: domain.NewID(), HabitID: habitID, LoggedOn: date(10, 1), Count: 1},
+					{ID: domain.NewID(), HabitID: habitID, LoggedOn: date(10, 5), Count: 2, Note: "doble"},
+				}, nil
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:   "sin fechas delega los valores por defecto",
+			target: path,
+			listFn: func(_, _ domain.ID, from, to time.Time) ([]habit.Log, error) {
+				if !from.IsZero() || !to.IsZero() {
+					t.Errorf("se esperaban fechas cero, llegaron %v y %v", from, to)
+				}
+				return nil, nil
+			},
+			wantStatus: http.StatusOK,
+		},
+		{name: "id inválido", target: "/api/v1/habits/no-uuid/logs", wantStatus: http.StatusBadRequest},
+		{name: "fecha inválida", target: path + "?from=01/10/2026", wantStatus: http.StatusBadRequest},
+		{
+			name:   "rango inválido",
+			target: path + "?from=2026-10-11&to=2026-10-01",
+			listFn: func(domain.ID, domain.ID, time.Time, time.Time) ([]habit.Log, error) {
+				return nil, fmt.Errorf("listar registros: %w: la fecha inicial es posterior a la final", domain.ErrInvalidInput)
+			},
+			wantStatus: http.StatusUnprocessableEntity,
+		},
+		{
+			name:   "hábito de otro usuario",
+			target: path,
+			listFn: func(domain.ID, domain.ID, time.Time, time.Time) ([]habit.Log, error) {
+				return nil, fmt.Errorf("listar registros: %w", domain.ErrNotFound)
+			},
+			wantStatus: http.StatusNotFound,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestRouter(Services{Habits: stubHabits{listLogs: tt.listFn}})
+			rec := do(h, http.MethodGet, tt.target, "", true)
+			expectStatus(t, rec, tt.wantStatus)
+			if tt.wantStatus != http.StatusOK {
+				return
+			}
+			logs, ok := decodeJSONBody(t, rec)["logs"].([]any)
+			if !ok {
+				t.Fatalf("logs no es una lista: %s", rec.Body.String())
+			}
+			if tt.listFn != nil && len(logs) == 2 {
+				if second := logs[1].(map[string]any); second["date"] != "2026-10-05" || second["note"] != "doble" {
+					t.Errorf("segundo registro = %v", second)
 				}
 			}
 		})

@@ -16,6 +16,7 @@ import (
 // UserService son los casos de uso de usuarios que expone la API.
 type UserService interface {
 	Register(ctx context.Context, in usecase.RegisterInput) (*user.User, error)
+	Profile(ctx context.Context, userID domain.ID) (*user.User, error)
 	UpdatePreferences(ctx context.Context, userID domain.ID, in usecase.PreferencesInput) (*user.User, error)
 }
 
@@ -36,6 +37,8 @@ type FinanceService interface {
 // HabitService son los casos de uso de hábitos que expone la API.
 type HabitService interface {
 	CreateHabit(ctx context.Context, userID domain.ID, in usecase.CreateHabitInput) (*habit.Habit, error)
+	ListHabits(ctx context.Context, userID domain.ID, activeOnly bool) ([]habit.Habit, error)
+	ListLogs(ctx context.Context, userID, habitID domain.ID, from, to time.Time) ([]habit.Log, error)
 	LogCompletion(ctx context.Context, userID, habitID domain.ID, in usecase.LogCompletionInput) (*habit.Log, error)
 }
 
@@ -78,6 +81,7 @@ func NewRouter(s Services, opts Options) http.Handler {
 
 	mux.HandleFunc("POST /api/v1/users", a.register)
 	mux.HandleFunc("POST /api/v1/auth/login", a.login)
+	mux.Handle("GET /api/v1/users/me", protected(a.profile))
 	mux.Handle("PATCH /api/v1/users/me", protected(a.updatePreferences))
 
 	mux.Handle("GET /api/v1/categories", protected(a.listCategories))
@@ -86,7 +90,9 @@ func NewRouter(s Services, opts Options) http.Handler {
 	mux.Handle("POST /api/v1/transactions", protected(a.recordTransaction))
 	mux.Handle("GET /api/v1/balance", protected(a.balance))
 
+	mux.Handle("GET /api/v1/habits", protected(a.listHabits))
 	mux.Handle("POST /api/v1/habits", protected(a.createHabit))
+	mux.Handle("GET /api/v1/habits/{id}/logs", protected(a.listLogs))
 	mux.Handle("POST /api/v1/habits/{id}/logs", protected(a.logCompletion))
 
 	return recoverPanics(cors(opts.AllowedOrigins, mux))

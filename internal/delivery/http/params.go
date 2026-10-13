@@ -22,6 +22,32 @@ func queryTime(q url.Values, key string) (time.Time, error) {
 	return t, nil
 }
 
+// queryDate lee un parámetro con formato YYYY-MM-DD; si está ausente devuelve el tiempo cero.
+func queryDate(q url.Values, key string) (time.Time, error) {
+	raw := q.Get(key)
+	if raw == "" {
+		return time.Time{}, nil
+	}
+	t, err := time.Parse(time.DateOnly, raw)
+	if err != nil {
+		return time.Time{}, badRequest("%s debe tener formato YYYY-MM-DD", key)
+	}
+	return t, nil
+}
+
+// queryBool lee un parámetro booleano (true/false); si está ausente devuelve false.
+func queryBool(q url.Values, key string) (bool, error) {
+	raw := q.Get(key)
+	if raw == "" {
+		return false, nil
+	}
+	b, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, badRequest("%s debe ser true o false", key)
+	}
+	return b, nil
+}
+
 // queryInt lee un parámetro entero; si está ausente devuelve 0.
 func queryInt(q url.Values, key string) (int, error) {
 	raw := q.Get(key)

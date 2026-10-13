@@ -110,6 +110,16 @@ func (a *api) login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, tokenResponse{AccessToken: token.Value, TokenType: "Bearer", ExpiresAt: token.ExpiresAt})
 }
 
+// profile atiende GET /api/v1/users/me.
+func (a *api) profile(w http.ResponseWriter, r *http.Request) {
+	u, err := a.Users.Profile(r.Context(), userIDFrom(r))
+	if err != nil {
+		respondError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, newUserResponse(u))
+}
+
 // updatePreferences atiende PATCH /api/v1/users/me.
 func (a *api) updatePreferences(w http.ResponseWriter, r *http.Request) {
 	var req preferencesRequest

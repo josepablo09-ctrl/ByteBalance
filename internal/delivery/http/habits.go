@@ -62,6 +62,67 @@ type habitLogResponse struct {
 	Note    string    `json:"note"`
 }
 
+func newHabitLogResponse(l *habit.Log) habitLogResponse {
+	return habitLogResponse{
+		ID:      l.ID,
+		HabitID: l.HabitID,
+		Date:    l.LoggedOn.Format(time.DateOnly),
+		Count:   l.Count,
+		Note:    l.Note,
+	}
+}
+
+// listHabits atiende GET /api/v1/habits. Con ?active=true omite los pausados.
+func (a *api) listHabits(w http.ResponseWriter, r *http.Request) {
+	activeOnly, err := queryBool(r.URL.Query(), "active")
+	if err != nil {
+		respondError(w, r, err)
+		return
+	}
+	habits, err := a.Habits.ListHabits(r.Context(), userIDFrom(r), activeOnly)
+	if err != nil {
+		respondError(w, r, err)
+		return
+	}
+	resp := make([]habitResponse, 0, len(habits))
+	for i := range habits {
+		resp = append(resp, newHabitResponse(&habits[i]))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"habits": resp})
+}
+
+// listLogs atiende GET /api/v1/habits/{id}/logs?from=YYYY-MM-DD&to=YYYY-MM-DD.
+// Sin fechas devuelve los últimos 30 días.
+func (a *api) listLogs(w http.ResponseWriter, r *http.Request) {
+	habitID, err := pathID(r, "id")
+	if err != nil {
+		respondError(w, r, err)
+		return
+	}
+	q := r.URL.Query()
+	from, err := queryDate(q, "from")
+	if err != nil {
+		respondError(w, r, err)
+		return
+	}
+	to, err := queryDate(q, "to")
+	if err != nil {
+		respondError(w, r, err)
+		return
+	}
+
+	logs, err := a.Habits.ListLogs(r.Context(), userIDFrom(r), habitID, from, to)
+	if err != nil {
+		respondError(w, r, err)
+		return
+	}
+	resp := make([]habitLogResponse, 0, len(logs))
+	for i := range logs {
+		resp = append(resp, newHabitLogResponse(&logs[i]))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"logs": resp})
+}
+
 // createHabit atiende POST /api/v1/habits.
 func (a *api) createHabit(w http.ResponseWriter, r *http.Request) {
 	var req createHabitRequest
@@ -124,11 +185,5 @@ func (a *api) logCompletion(w http.ResponseWriter, r *http.Request) {
 		respondError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, habitLogResponse{
-		ID:      l.ID,
-		HabitID: l.HabitID,
-		Date:    l.LoggedOn.Format(time.DateOnly),
-		Count:   l.Count,
-		Note:    l.Note,
-	})
+	writeJSON(w, http.StatusOK, newHabitLogResponse(l))
 }
