@@ -1,0 +1,2 @@
+# Go exige LF (gofmt); evita que core.autocrlf convierta los .go a CRLF en Windows.
+*.go text eol=lf
