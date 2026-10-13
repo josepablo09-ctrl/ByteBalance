@@ -9,8 +9,14 @@ import (
 	"bytebalance/internal/domain/habit"
 )
 
-// HabitService implementa los casos de uso de hábitos: creación y registro
-// del cumplimiento diario.
+// Rango de fechas (en días, ambos extremos incluidos) al listar registros.
+const (
+	defaultLogRangeDays = 30
+	maxLogRangeDays     = 366
+)
+
+// HabitService implementa los casos de uso de hábitos: creación, consulta y
+// registro del cumplimiento diario.
 type HabitService struct {
 	habits habit.Repository
 	logs   habit.LogRepository
@@ -92,6 +98,51 @@ func (s *HabitService) LogCompletion(ctx context.Context, userID, habitID domain
 		return nil, fmt.Errorf("registrar cumplimiento: %w", err)
 	}
 	return l, nil
+}
+
+// ListHabits devuelve los hábitos del usuario; con activeOnly omite los pausados.
+func (s *HabitService) ListHabits(ctx context.Context, userID domain.ID, activeOnly bool) ([]habit.Habit, error) {
+	habits, err := s.habits.ListByUser(ctx, userID, activeOnly)
+	if err != nil {
+		return nil, fmt.Errorf("listar hábitos: %w", err)
+	}
+	return habits, nil
+}
+
+// ListLogs devuelve los registros de un hábito del usuario con fecha en
+// [from, to] (solo cuenta la fecha), ordenados por fecha. Si to es cero se usa
+// hoy en la zona horaria del usuario; si from es cero, los 30 días que terminan
+// en to. El rango no puede superar 366 días.
+func (s *HabitService) ListLogs(ctx context.Context, userID, habitID domain.ID, from, to time.Time) ([]habit.Log, error) {
+	// Comprueba la propiedad: el repositorio de registros no la valida.
+	if _, err := s.habits.GetByID(ctx, userID, habitID); err != nil {
+		return nil, fmt.Errorf("listar registros: %w", err)
+	}
+
+	to = habit.DateOf(to)
+	if to.IsZero() {
+		today, err := s.userToday(ctx, userID)
+		if err != nil {
+			return nil, fmt.Errorf("listar registros: %w", err)
+		}
+		to = today
+	}
+	from = habit.DateOf(from)
+	if from.IsZero() {
+		from = to.AddDate(0, 0, -(defaultLogRangeDays - 1))
+	}
+	if from.After(to) {
+		return nil, fmt.Errorf("listar registros: %w: la fecha inicial es posterior a la final", domain.ErrInvalidInput)
+	}
+	if to.Sub(from) >= maxLogRangeDays*24*time.Hour {
+		return nil, fmt.Errorf("listar registros: %w: el rango no puede superar %d días", domain.ErrInvalidInput, maxLogRangeDays)
+	}
+
+	logs, err := s.logs.ListByHabit(ctx, habitID, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("listar registros: %w", err)
+	}
+	return logs, nil
 }
 
 // userToday devuelve la fecha actual en la zona horaria del usuario.

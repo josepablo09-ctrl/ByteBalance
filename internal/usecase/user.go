@@ -92,6 +92,15 @@ func (s *UserService) Register(ctx context.Context, in RegisterInput) (*user.Use
 	return u, nil
 }
 
+// Profile devuelve el usuario con ID userID.
+func (s *UserService) Profile(ctx context.Context, userID domain.ID) (*user.User, error) {
+	u, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("obtener perfil: %w", err)
+	}
+	return u, nil
+}
+
 // PreferencesInput son las preferencias a modificar. Un campo nil se deja igual.
 type PreferencesInput struct {
 	FullName        *string

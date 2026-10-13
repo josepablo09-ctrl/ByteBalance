@@ -277,3 +277,19 @@ func TestUserServiceUpdatePreferences(t *testing.T) {
 		})
 	}
 }
+
+func TestUserServiceProfile(t *testing.T) {
+	existing := existingUser(t, "ana@example.com", "UTC")
+	svc := NewUserService(newFakeUserRepo(existing), &stubHasher{})
+
+	u, err := svc.Profile(context.Background(), existing.ID)
+	if err != nil {
+		t.Fatalf("Profile() error inesperado: %v", err)
+	}
+	if u.ID != existing.ID || u.Email != existing.Email {
+		t.Errorf("Profile() = %+v", u)
+	}
+	if _, err := svc.Profile(context.Background(), domain.NewID()); !errors.Is(err, domain.ErrNotFound) {
+		t.Errorf("Profile() de un usuario inexistente: error = %v, se esperaba ErrNotFound", err)
+	}
+}

@@ -259,3 +259,100 @@ func TestHabitServiceLogCompletionReplacesSameDay(t *testing.T) {
 		t.Errorf("registro guardado = %+v", stored)
 	}
 }
+
+func TestHabitServiceListHabits(t *testing.T) {
+	owner := existingUser(t, "ana@example.com", "UTC")
+	other := existingUser(t, "otro@example.com", "UTC")
+	active := habit.Habit{ID: domain.NewID(), UserID: owner.ID, Name: "Leer", IsActive: true}
+	paused := habit.Habit{ID: domain.NewID(), UserID: owner.ID, Name: "Correr"}
+	foreign := habit.Habit{ID: domain.NewID(), UserID: other.ID, Name: "Ajeno", IsActive: true}
+	svc := NewHabitService(newFakeHabitRepo(active, paused, foreign), newFakeLogRepo(), newFakeUserRepo(owner, other), fixedClock)
+
+	tests := []struct {
+		name       string
+		activeOnly bool
+		want       []domain.ID
+	}{
+		{name: "todos", want: []domain.ID{active.ID, paused.ID}},
+		{name: "solo activos", activeOnly: true, want: []domain.ID{active.ID}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			habits, err := svc.ListHabits(context.Background(), owner.ID, tt.activeOnly)
+			if err != nil {
+				t.Fatalf("ListHabits() error inesperado: %v", err)
+			}
+			got := make(map[domain.ID]bool, len(habits))
+			for _, h := range habits {
+				got[h.ID] = true
+			}
+			if len(got) != len(tt.want) {
+				t.Fatalf("ListHabits() = %d hábitos, se esperaban %d", len(got), len(tt.want))
+			}
+			for _, id := range tt.want {
+				if !got[id] {
+					t.Errorf("falta el hábito %v", id)
+				}
+			}
+		})
+	}
+}
+
+func TestHabitServiceListLogs(t *testing.T) {
+	// fixedNow es 2026-10-11 18:30 UTC: en Tokio ya es 12 de octubre.
+	owner := existingUser(t, "tokio@example.com", "Asia/Tokyo")
+	stranger := existingUser(t, "otro@example.com", "UTC")
+	h := habit.Habit{ID: domain.NewID(), UserID: owner.ID, Name: "Leer", Frequency: habit.Daily, TargetCount: 1, IsActive: true}
+	date := func(m time.Month, d int) time.Time { return time.Date(2026, m, d, 0, 0, 0, 0, time.UTC) }
+
+	logs := newFakeLogRepo()
+	for _, d := range []time.Time{date(9, 12), date(9, 13), date(10, 1), date(10, 12)} {
+		if err := logs.Upsert(context.Background(), &habit.Log{HabitID: h.ID, LoggedOn: d, Count: 1}); err != nil {
+			t.Fatalf("sembrar registro: %v", err)
+		}
+	}
+	svc := NewHabitService(newFakeHabitRepo(h), logs, newFakeUserRepo(owner, stranger), fixedClock)
+
+	tests := []struct {
+		name      string
+		userID    domain.ID
+		from, to  time.Time
+		wantDates []time.Time
+		wantErr   error
+	}{
+		{name: "por defecto los últimos 30 días del usuario", userID: owner.ID, wantDates: []time.Time{date(9, 13), date(10, 1), date(10, 12)}},
+		{name: "rango explícito inclusivo", userID: owner.ID, from: date(9, 12), to: date(10, 1), wantDates: []time.Time{date(9, 12), date(9, 13), date(10, 1)}},
+		{name: "solo desde", userID: owner.ID, from: date(10, 1), wantDates: []time.Time{date(10, 1), date(10, 12)}},
+		{name: "solo hasta", userID: owner.ID, to: date(10, 1), wantDates: []time.Time{date(9, 12), date(9, 13), date(10, 1)}},
+		{name: "rango máximo", userID: owner.ID, from: date(10, 1).AddDate(0, 0, -365), to: date(10, 1), wantDates: []time.Time{date(9, 12), date(9, 13), date(10, 1)}},
+		{name: "rango excesivo", userID: owner.ID, from: date(10, 1).AddDate(0, 0, -366), to: date(10, 1), wantErr: domain.ErrInvalidInput},
+		{name: "desde posterior a hasta", userID: owner.ID, from: date(10, 2), to: date(10, 1), wantErr: domain.ErrInvalidInput},
+		{name: "hábito de otro usuario", userID: stranger.ID, wantErr: domain.ErrNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := svc.ListLogs(context.Background(), tt.userID, h.ID, tt.from, tt.to)
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("ListLogs() error = %v, se esperaba %v", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ListLogs() error inesperado: %v", err)
+			}
+			gotDates := make(map[time.Time]bool, len(got))
+			for _, l := range got {
+				gotDates[l.LoggedOn] = true
+			}
+			if len(gotDates) != len(tt.wantDates) {
+				t.Fatalf("ListLogs() = %v, se esperaban las fechas %v", got, tt.wantDates)
+			}
+			for _, d := range tt.wantDates {
+				if !gotDates[d] {
+					t.Errorf("falta el registro del %s", d.Format(time.DateOnly))
+				}
+			}
+		})
+	}
+}
