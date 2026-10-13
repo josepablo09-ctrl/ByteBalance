@@ -85,7 +85,8 @@ func (a *api) register(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, newUserResponse(u))
 }
 
-// login atiende POST /api/v1/auth/login.
+// login atiende POST /api/v1/auth/login. Los intentos se limitan por IP y por
+// email; al superar el límite se responde 429 con Retry-After.
 func (a *api) login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := decodeJSON(w, r, &req); err != nil {
@@ -94,6 +95,10 @@ func (a *api) login(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.TrimSpace(req.Email) == "" || req.Password == "" {
 		respondError(w, r, badRequest("email y password son obligatorios"))
+		return
+	}
+	if ok, wait := a.loginLimits.allow(clientIP(r, a.opts.TrustedProxyHops), req.Email); !ok {
+		tooManyRequests(w, r, wait)
 		return
 	}
 

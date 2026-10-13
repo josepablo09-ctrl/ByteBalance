@@ -49,15 +49,25 @@ type Services struct {
 	DB      Pinger
 }
 
+// Options configura el comportamiento transversal del router.
+type Options struct {
+	// TrustedProxyHops es el número de proxies de confianza delante de la API
+	// (p. ej. 1 detrás de un ALB). Con 0 se ignora X-Forwarded-For y la IP del
+	// cliente es la de la conexión.
+	TrustedProxyHops int
+}
+
 // api contiene los handlers REST; cada método atiende un endpoint.
 type api struct {
 	Services
+	opts        Options
+	loginLimits *loginThrottle
 }
 
 // NewRouter construye el handler HTTP con todas las rutas de la API v1.
 // Las rutas bajo /api/v1, salvo registro y login, exigen un token de acceso.
-func NewRouter(s Services) http.Handler {
-	a := &api{Services: s}
+func NewRouter(s Services, opts Options) http.Handler {
+	a := &api{Services: s, opts: opts, loginLimits: newLoginThrottle(time.Now)}
 	protected := func(fn http.HandlerFunc) http.Handler { return requireAuth(s.Tokens, fn) }
 
 	mux := http.NewServeMux()

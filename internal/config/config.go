@@ -24,6 +24,8 @@ const (
 	dotEnvFile  = ".env"
 	// minJWTSecretLen coincide con security.MinJWTSecretLen (256 bits para HS256).
 	minJWTSecretLen = 32
+	// maxTrustedProxyHops acota TRUSTED_PROXY_HOPS a un valor razonable.
+	maxTrustedProxyHops = 10
 )
 
 // sslmodes que cifran la conexión; obligatorios fuera de desarrollo.
@@ -41,6 +43,11 @@ type Config struct {
 	// JWTSecret es la clave HS256 con la que se firman los tokens de acceso
 	// (JWT_SECRET). Es un secreto: nunca debe registrarse en logs.
 	JWTSecret string
+	// TrustedProxyHops es el número de proxies de confianza delante de la API
+	// (TRUSTED_PROXY_HOPS), p. ej. 1 detrás de un ALB de AWS. Determina qué
+	// entrada de X-Forwarded-For es la IP real del cliente. Por defecto 0: la
+	// cabecera se ignora.
+	TrustedProxyHops int
 }
 
 // IsDevelopment indica si la aplicación corre en el entorno local de desarrollo.
@@ -109,6 +116,14 @@ func parse(lookup func(string) (string, bool)) (Config, error) {
 			errs = append(errs, fmt.Errorf("APP_PORT %q inválido: debe ser un número entre 1 y 65535", raw))
 		}
 		cfg.Port = port
+	}
+
+	if raw := get("TRUSTED_PROXY_HOPS"); raw != "" {
+		hops, err := strconv.Atoi(raw)
+		if err != nil || hops < 0 || hops > maxTrustedProxyHops {
+			errs = append(errs, fmt.Errorf("TRUSTED_PROXY_HOPS %q inválido: debe ser un número entre 0 y %d", raw, maxTrustedProxyHops))
+		}
+		cfg.TrustedProxyHops = hops
 	}
 
 	if err := validateDatabaseURL(cfg.DatabaseURL, cfg.Env); err != nil {

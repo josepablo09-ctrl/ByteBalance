@@ -129,9 +129,13 @@ func (s stubHabits) LogCompletion(_ context.Context, userID, habitID domain.ID, 
 	return s.logCompletion(userID, habitID, in)
 }
 
-// newTestRouter construye el router con stubs; los servicios no indicados
-// quedan sin configurar.
+// newTestRouter construye el router con stubs y opciones por defecto.
 func newTestRouter(s Services) http.Handler {
+	return NewRouter(withStubs(s), Options{})
+}
+
+// withStubs completa con stubs los servicios no indicados, que quedan sin configurar.
+func withStubs(s Services) Services {
 	if s.Users == nil {
 		s.Users = stubUsers{}
 	}
@@ -150,7 +154,7 @@ func newTestRouter(s Services) http.Handler {
 	if s.DB == nil {
 		s.DB = pingerFunc(func(context.Context) error { return nil })
 	}
-	return NewRouter(s)
+	return s
 }
 
 // do envía una petición al handler; con authenticated añade un token válido.

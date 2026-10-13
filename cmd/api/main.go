@@ -75,6 +75,8 @@ func newHandler(cfg config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 		Habits:  usecase.NewHabitService(repos.habits, repos.habitLogs, repos.users, time.Now),
 		Tokens:  tokens,
 		DB:      pool,
+	}, httpdelivery.Options{
+		TrustedProxyHops: cfg.TrustedProxyHops,
 	}), nil
 }
 

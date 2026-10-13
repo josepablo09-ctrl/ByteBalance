@@ -72,6 +72,21 @@ func TestParse(t *testing.T) {
 			vars:    map[string]string{"DATABASE_URL": localDB, "JWT_SECRET": "corta"},
 			wantErr: []string{"JWT_SECRET", "32 bytes"},
 		},
+		{
+			name: "detrás de un proxy",
+			vars: map[string]string{"DATABASE_URL": localDB, "JWT_SECRET": jwtSecret, "TRUSTED_PROXY_HOPS": "1"},
+			want: Config{Env: EnvDevelopment, Port: 8080, DatabaseURL: localDB, JWTSecret: jwtSecret, TrustedProxyHops: 1},
+		},
+		{
+			name:    "TRUSTED_PROXY_HOPS negativo",
+			vars:    map[string]string{"DATABASE_URL": localDB, "JWT_SECRET": jwtSecret, "TRUSTED_PROXY_HOPS": "-1"},
+			wantErr: []string{"TRUSTED_PROXY_HOPS"},
+		},
+		{
+			name:    "TRUSTED_PROXY_HOPS no numérico",
+			vars:    map[string]string{"DATABASE_URL": localDB, "JWT_SECRET": jwtSecret, "TRUSTED_PROXY_HOPS": "alb"},
+			wantErr: []string{"TRUSTED_PROXY_HOPS"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
