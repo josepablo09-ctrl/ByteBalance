@@ -41,18 +41,20 @@ src/
 │   │   ├── client.js # fetch + Bearer token + ApiError
 │   │   ├── auth.js   # login, registro, perfil
 │   │   ├── finance.js# categorías, transacciones, balance
+│   │   ├── habits.js # hábitos y registros diarios
 │   │   ├── errors.js # ApiError → mensaje para el usuario
 │   │   └── index.js  # instancia de la app conectada a la sesión
 │   ├── components/   # UI reutilizable (Button, Modal, Sidebar, TransactionForm…)
 │   ├── stores/       # Estado global (session, profile)
 │   ├── config.js     # VITE_API_URL validada
 │   ├── dates.js      # Fechas y meses en la zona horaria del usuario
+│   ├── habits.js     # Periodos, progreso y rachas de hábitos
 │   ├── money.js      # Centavos ↔ texto, sin coma flotante
 │   ├── transactions.js # Formulario de transacción → petición a la API
 │   └── validation.js # Reglas espejo del backend
 └── routes/
     ├── (auth)/       # login, register — redirigen a / si hay sesión
-    └── (app)/        # layout con sidebar + header; / es el dashboard de finanzas
+    └── (app)/        # layout con sidebar + header; / finanzas, /habits hábitos
 ```
 
 ## Convenciones de datos

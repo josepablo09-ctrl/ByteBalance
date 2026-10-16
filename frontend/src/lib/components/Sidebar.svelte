@@ -20,10 +20,10 @@
 	// Mismo punto de corte que `lg:` de Tailwind.
 	const isDesktop = new MediaQuery('min-width: 1024px');
 
-	/** @type {{ label: string, icon: 'wallet' | 'habits', route?: '/(app)', soon?: boolean }[]} */
+	/** @type {{ label: string, icon: 'wallet' | 'habits', route: '/(app)' | '/(app)/habits' }[]} */
 	const NAV_ITEMS = [
 		{ label: 'Finanzas', icon: 'wallet', route: '/(app)' },
-		{ label: 'Hábitos', icon: 'habits', soon: true }
+		{ label: 'Hábitos', icon: 'habits', route: '/(app)/habits' }
 	];
 </script>
 
@@ -56,38 +56,21 @@
 			Espacio
 		</p>
 		{#each NAV_ITEMS as item (item.label)}
-			{#if item.route}
-				{@const isActive = page.url.pathname === resolve(item.route)}
-				<a
-					href={resolve(item.route)}
-					onclick={onclose}
-					aria-current={isActive ? 'page' : undefined}
-					class={[
-						'flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-sm transition-colors',
-						isActive
-							? 'bg-zinc-900 text-zinc-50'
-							: 'text-zinc-400 hover:bg-zinc-900/60 hover:text-zinc-200'
-					]}
-				>
-					<Icon name={item.icon} class={isActive ? 'size-4 text-emerald-400' : 'size-4'} />
-					{item.label}
-				</a>
-			{:else}
-				<span
-					class="flex h-9 cursor-not-allowed items-center gap-2.5 rounded-lg px-2.5 text-sm text-zinc-600"
-					aria-disabled="true"
-				>
-					<Icon name={item.icon} />
-					{item.label}
-					{#if item.soon}
-						<span
-							class="ml-auto rounded border border-zinc-800 px-1.5 py-px font-mono text-[10px] text-zinc-500"
-						>
-							Pronto
-						</span>
-					{/if}
-				</span>
-			{/if}
+			{@const isActive = page.url.pathname === resolve(item.route)}
+			<a
+				href={resolve(item.route)}
+				onclick={onclose}
+				aria-current={isActive ? 'page' : undefined}
+				class={[
+					'flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-sm transition-colors',
+					isActive
+						? 'bg-zinc-900 text-zinc-50'
+						: 'text-zinc-400 hover:bg-zinc-900/60 hover:text-zinc-200'
+				]}
+			>
+				<Icon name={item.icon} class={isActive ? 'size-4 text-emerald-400' : 'size-4'} />
+				{item.label}
+			</a>
 		{/each}
 	</nav>
 </aside>

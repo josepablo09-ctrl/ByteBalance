@@ -6,8 +6,8 @@
 	 * @property {string} id
 	 * @property {string} label
 	 * @property {string} [value]
-	 * @property {'text' | 'email' | 'password' | 'date'} [type]
-	 * @property {'text' | 'decimal'} [inputmode] Teclado sugerido en móviles.
+	 * @property {'text' | 'email' | 'password' | 'date' | 'time'} [type]
+	 * @property {'text' | 'decimal' | 'numeric'} [inputmode] Teclado sugerido en móviles.
 	 * @property {number} [maxlength]
 	 * @property {string} [error]
 	 * @property {string} [hint]

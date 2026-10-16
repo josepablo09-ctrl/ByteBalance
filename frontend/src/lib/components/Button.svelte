@@ -5,7 +5,9 @@
 		primary: 'bg-emerald-500 text-zinc-950 hover:bg-emerald-400 focus-visible:ring-emerald-500/50',
 		secondary:
 			'border border-zinc-800 bg-zinc-900 text-zinc-200 hover:border-zinc-700 hover:bg-zinc-800/70 focus-visible:ring-zinc-500/40',
-		ghost: 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100 focus-visible:ring-zinc-500/40'
+		ghost: 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100 focus-visible:ring-zinc-500/40',
+		danger:
+			'border border-red-500/30 bg-red-500/10 text-red-300 hover:border-red-500/50 hover:bg-red-500/15 focus-visible:ring-red-500/40'
 	};
 
 	/**
