@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"bytebalance/internal/domain"
@@ -58,6 +59,68 @@ func (s *HabitService) CreateHabit(ctx context.Context, userID domain.ID, in Cre
 		return nil, fmt.Errorf("crear hábito: %w", err)
 	}
 	return h, nil
+}
+
+// UpdateHabitInput son los cambios a un hábito. Un campo nil se deja igual.
+type UpdateHabitInput struct {
+	Name        *string
+	Description *string
+	Frequency   *habit.Frequency
+	TargetCount *int
+	// SetReminder indica si se modifica el recordatorio; entonces ReminderTime
+	// nil lo quita.
+	SetReminder  bool
+	ReminderTime *habit.TimeOfDay
+	// IsActive pausa (false) o reanuda (true) el hábito.
+	IsActive *bool
+}
+
+// UpdateHabit modifica un hábito del usuario. Si algún valor es inválido no se
+// guarda ningún cambio. Un hábito ajeno se reporta como inexistente.
+func (s *HabitService) UpdateHabit(ctx context.Context, userID, habitID domain.ID, in UpdateHabitInput) (*habit.Habit, error) {
+	h, err := s.habits.GetByID(ctx, userID, habitID)
+	if err != nil {
+		return nil, fmt.Errorf("actualizar hábito: %w", err)
+	}
+	if in.Name != nil {
+		h.Name = strings.TrimSpace(*in.Name)
+	}
+	if in.Description != nil {
+		h.Description = strings.TrimSpace(*in.Description)
+	}
+	if in.Frequency != nil {
+		h.Frequency = *in.Frequency
+	}
+	if in.TargetCount != nil {
+		h.TargetCount = *in.TargetCount
+	}
+	if in.SetReminder {
+		h.ReminderTime = in.ReminderTime
+	}
+	if in.IsActive != nil {
+		if *in.IsActive {
+			h.Activate()
+		} else {
+			h.Deactivate()
+		}
+	}
+	if err := h.Validate(); err != nil {
+		return nil, fmt.Errorf("actualizar hábito: %w", err)
+	}
+
+	if err := s.habits.Update(ctx, h); err != nil {
+		return nil, fmt.Errorf("actualizar hábito: %w", err)
+	}
+	return h, nil
+}
+
+// DeleteHabit elimina (borrado lógico) un hábito del usuario y deja de
+// mostrarlo junto con su historial. Un hábito ajeno se reporta como inexistente.
+func (s *HabitService) DeleteHabit(ctx context.Context, userID, habitID domain.ID) error {
+	if err := s.habits.Delete(ctx, userID, habitID); err != nil {
+		return fmt.Errorf("eliminar hábito: %w", err)
+	}
+	return nil
 }
 
 // LogCompletionInput es el cumplimiento de un hábito en un día.

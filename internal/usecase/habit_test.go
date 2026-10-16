@@ -356,3 +356,137 @@ func TestHabitServiceListLogs(t *testing.T) {
 		})
 	}
 }
+
+func TestHabitServiceUpdateHabit(t *testing.T) {
+	owner := existingUser(t, "ana@example.com", "UTC")
+	stranger := existingUser(t, "otro@example.com", "UTC")
+	reminder := habit.TimeOfDay{Hour: 7, Minute: 15}
+	original := habit.Habit{
+		ID: domain.NewID(), UserID: owner.ID, Name: "Leer", Description: "20 páginas",
+		Frequency: habit.Daily, TargetCount: 1, ReminderTime: &reminder, IsActive: true,
+	}
+	str := func(s string) *string { return &s }
+	num := func(n int) *int { return &n }
+	boolean := func(b bool) *bool { return &b }
+	freq := func(f habit.Frequency) *habit.Frequency { return &f }
+
+	tests := []struct {
+		name    string
+		userID  domain.ID
+		in      UpdateHabitInput
+		wantErr error
+		check   func(t *testing.T, h habit.Habit)
+	}{
+		{
+			name:   "cambia nombre, frecuencia y meta",
+			userID: owner.ID,
+			in:     UpdateHabitInput{Name: str(" Leer más "), Frequency: freq(habit.Weekly), TargetCount: num(4)},
+			check: func(t *testing.T, h habit.Habit) {
+				if h.Name != "Leer más" || h.Frequency != habit.Weekly || h.TargetCount != 4 {
+					t.Errorf("hábito = %+v", h)
+				}
+				if h.Description != "20 páginas" || h.ReminderTime == nil || !h.IsActive {
+					t.Errorf("los campos no enviados no debían cambiar: %+v", h)
+				}
+			},
+		},
+		{
+			name:   "pausa el hábito",
+			userID: owner.ID,
+			in:     UpdateHabitInput{IsActive: boolean(false)},
+			check: func(t *testing.T, h habit.Habit) {
+				if h.IsActive {
+					t.Error("el hábito debía quedar pausado")
+				}
+			},
+		},
+		{
+			name:   "quita el recordatorio",
+			userID: owner.ID,
+			in:     UpdateHabitInput{SetReminder: true},
+			check: func(t *testing.T, h habit.Habit) {
+				if h.ReminderTime != nil {
+					t.Errorf("recordatorio = %v, se esperaba nil", h.ReminderTime)
+				}
+			},
+		},
+		{name: "nombre vacío", userID: owner.ID, in: UpdateHabitInput{Name: str("  ")}, wantErr: domain.ErrInvalidInput},
+		{name: "meta cero", userID: owner.ID, in: UpdateHabitInput{TargetCount: num(0)}, wantErr: domain.ErrInvalidInput},
+		{name: "frecuencia inválida", userID: owner.ID, in: UpdateHabitInput{Frequency: freq("hourly")}, wantErr: domain.ErrInvalidInput},
+		{name: "hábito de otro usuario", userID: stranger.ID, in: UpdateHabitInput{Name: str("x")}, wantErr: domain.ErrNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			habits := newFakeHabitRepo(original)
+			svc := NewHabitService(habits, newFakeLogRepo(), newFakeUserRepo(owner, stranger), fixedClock)
+
+			_, err := svc.UpdateHabit(context.Background(), tt.userID, original.ID, tt.in)
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("UpdateHabit() error = %v, se esperaba %v", err, tt.wantErr)
+				}
+				if stored := habits.byID[original.ID]; stored.Name != original.Name || stored.TargetCount != original.TargetCount {
+					t.Errorf("un cambio inválido no debe persistirse: %+v", stored)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("UpdateHabit() error inesperado: %v", err)
+			}
+			tt.check(t, habits.byID[original.ID])
+		})
+	}
+}
+
+func TestHabitServicePausedHabitRejectsLogsUntilResumed(t *testing.T) {
+	u := existingUser(t, "ana@example.com", "UTC")
+	h := habit.Habit{ID: domain.NewID(), UserID: u.ID, Name: "Correr", Frequency: habit.Daily, TargetCount: 1, IsActive: true}
+	svc := NewHabitService(newFakeHabitRepo(h), newFakeLogRepo(), newFakeUserRepo(u), fixedClock)
+	ctx := context.Background()
+	paused, resumed := false, true
+
+	if _, err := svc.UpdateHabit(ctx, u.ID, h.ID, UpdateHabitInput{IsActive: &paused}); err != nil {
+		t.Fatalf("pausar: %v", err)
+	}
+	if _, err := svc.LogCompletion(ctx, u.ID, h.ID, LogCompletionInput{}); !errors.Is(err, habit.ErrInactive) {
+		t.Fatalf("LogCompletion() en pausa: error = %v, se esperaba ErrInactive", err)
+	}
+	if _, err := svc.UpdateHabit(ctx, u.ID, h.ID, UpdateHabitInput{IsActive: &resumed}); err != nil {
+		t.Fatalf("reanudar: %v", err)
+	}
+	if _, err := svc.LogCompletion(ctx, u.ID, h.ID, LogCompletionInput{}); err != nil {
+		t.Fatalf("LogCompletion() tras reanudar: %v", err)
+	}
+}
+
+func TestHabitServiceDeleteHabit(t *testing.T) {
+	owner := existingUser(t, "ana@example.com", "UTC")
+	stranger := existingUser(t, "otro@example.com", "UTC")
+	h := habit.Habit{ID: domain.NewID(), UserID: owner.ID, Name: "Leer", Frequency: habit.Daily, TargetCount: 1, IsActive: true}
+
+	tests := []struct {
+		name    string
+		userID  domain.ID
+		habitID domain.ID
+		wantErr error
+	}{
+		{name: "elimina el hábito propio", userID: owner.ID, habitID: h.ID},
+		{name: "hábito de otro usuario", userID: stranger.ID, habitID: h.ID, wantErr: domain.ErrNotFound},
+		{name: "hábito inexistente", userID: owner.ID, habitID: domain.NewID(), wantErr: domain.ErrNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			habits := newFakeHabitRepo(h)
+			svc := NewHabitService(habits, newFakeLogRepo(), newFakeUserRepo(owner, stranger), fixedClock)
+
+			err := svc.DeleteHabit(context.Background(), tt.userID, tt.habitID)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("DeleteHabit() error = %v, se esperaba %v", err, tt.wantErr)
+			}
+			_, stillThere := habits.byID[h.ID]
+			if stillThere == (tt.wantErr == nil) {
+				t.Errorf("hábito presente = %v tras DeleteHabit()", stillThere)
+			}
+		})
+	}
+}
