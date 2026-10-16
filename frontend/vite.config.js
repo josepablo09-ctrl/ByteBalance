@@ -25,6 +25,8 @@ export default defineConfig({
 	},
 	test: {
 		expect: { requireAssertions: true },
+		// Los tests no dependen de frontend/.env (que no existe en CI).
+		env: { VITE_API_URL: 'http://localhost:8080/api/v1' },
 		projects: [
 			{
 				extends: './vite.config.js',
