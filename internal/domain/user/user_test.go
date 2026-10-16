@@ -1,9 +1,11 @@
 package user
 
 import (
+	"bytes"
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"bytebalance/internal/domain"
 )
@@ -92,5 +94,32 @@ func TestValidateRejectsEmptyTimezone(t *testing.T) {
 	u.Timezone = ""
 	if err := u.Validate(); !errors.Is(err, domain.ErrInvalidInput) {
 		t.Fatalf("Validate() con zona horaria vacía error = %v, se esperaba ErrInvalidInput", err)
+	}
+}
+
+func TestNewLinkCode(t *testing.T) {
+	now := time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)
+	id := domain.NewID()
+
+	code, lc, err := NewLinkCode(id, now)
+	if err != nil {
+		t.Fatalf("NewLinkCode() error inesperado: %v", err)
+	}
+	if len(code) != 32 || strings.Trim(code, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-") != "" {
+		t.Errorf("código %q: debe tener 32 caracteres válidos para el parámetro start de Telegram", code)
+	}
+	if lc.UserID != id || !lc.ExpiresAt.Equal(now.Add(LinkCodeTTL)) {
+		t.Errorf("LinkCode = %+v", lc)
+	}
+	if !bytes.Equal(lc.Hash, HashLinkCode(code)) || bytes.Contains(lc.Hash, []byte(code)) {
+		t.Error("solo debe persistirse el hash del código")
+	}
+
+	other, _, err := NewLinkCode(id, now)
+	if err != nil || other == code {
+		t.Errorf("dos códigos generados no deben coincidir (%q, %v)", other, err)
+	}
+	if _, _, err := NewLinkCode(domain.ID{}, now); !errors.Is(err, domain.ErrInvalidInput) {
+		t.Errorf("sin usuario: error = %v, se esperaba ErrInvalidInput", err)
 	}
 }

@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"time"
 
 	"bytebalance/internal/domain"
 )
@@ -22,4 +23,15 @@ type Repository interface {
 	Update(ctx context.Context, u *User) error
 	// Delete marca al usuario como eliminado.
 	Delete(ctx context.Context, id domain.ID) error
+}
+
+// LinkCodeRepository persiste los códigos de vinculación con Telegram.
+type LinkCodeRepository interface {
+	// Replace guarda c e invalida los códigos anteriores del mismo usuario: solo
+	// el último código generado sirve.
+	Replace(ctx context.Context, c *LinkCode) error
+	// Consume marca como usado el código con ese hash si sigue vigente en now y
+	// devuelve su usuario. Es atómico: un código solo se consume una vez.
+	// Devuelve domain.ErrNotFound si no existe, venció o ya se usó.
+	Consume(ctx context.Context, hash []byte, now time.Time) (domain.ID, error)
 }
