@@ -1,6 +1,7 @@
 <script>
 	import { ApiError } from '#lib/api/client.js';
 	import { errorMessage } from '#lib/api/errors.js';
+	import { CURRENCIES } from '#lib/currencies.js';
 	import {
 		browserTimezone,
 		hasErrors,
@@ -12,18 +13,6 @@
 	import PasswordField from './PasswordField.svelte';
 	import SelectField from './SelectField.svelte';
 	import TextField from './TextField.svelte';
-
-	const CURRENCIES = [
-		{ value: 'USD', label: 'USD · Dólar estadounidense' },
-		{ value: 'EUR', label: 'EUR · Euro' },
-		{ value: 'CRC', label: 'CRC · Colón costarricense' },
-		{ value: 'MXN', label: 'MXN · Peso mexicano' },
-		{ value: 'COP', label: 'COP · Peso colombiano' },
-		{ value: 'ARS', label: 'ARS · Peso argentino' },
-		{ value: 'CLP', label: 'CLP · Peso chileno' },
-		{ value: 'PEN', label: 'PEN · Sol peruano' },
-		{ value: 'GBP', label: 'GBP · Libra esterlina' }
-	];
 
 	/**
 	 * @typedef {object} Props
