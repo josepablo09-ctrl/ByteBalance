@@ -4,6 +4,7 @@ import { createAuthApi } from './auth.js';
 import { createApiClient } from './client.js';
 import { createFinanceApi } from './finance.js';
 import { createHabitsApi } from './habits.js';
+import { createTelegramApi } from './telegram.js';
 
 export { ApiError, NETWORK_ERROR } from './client.js';
 export { errorMessage } from './errors.js';
@@ -18,3 +19,4 @@ export const api = createApiClient({
 export const authApi = createAuthApi(api);
 export const financeApi = createFinanceApi(api);
 export const habitsApi = createHabitsApi(api);
+export const telegramApi = createTelegramApi(api);

@@ -128,7 +128,8 @@
 			<div>
 				<p id="habit-reminder-label" class="text-sm font-medium text-zinc-300">Recordatorio</p>
 				<p class="text-xs text-zinc-500">
-					Hora del aviso diario, en tu zona horaria. El envío por Telegram aún no está activo.
+					Aviso por Telegram a esta hora (tu zona horaria) si aún no cumpliste la meta. Conéctalo en
+					Ajustes.
 				</p>
 			</div>
 			<button

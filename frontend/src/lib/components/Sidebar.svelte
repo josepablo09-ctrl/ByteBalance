@@ -20,10 +20,11 @@
 	// Mismo punto de corte que `lg:` de Tailwind.
 	const isDesktop = new MediaQuery('min-width: 1024px');
 
-	/** @type {{ label: string, icon: 'wallet' | 'habits', route: '/(app)' | '/(app)/habits' }[]} */
+	/** @type {{ label: string, icon: 'wallet' | 'habits' | 'settings', route: '/(app)' | '/(app)/habits' | '/(app)/settings' }[]} */
 	const NAV_ITEMS = [
 		{ label: 'Finanzas', icon: 'wallet', route: '/(app)' },
-		{ label: 'Hábitos', icon: 'habits', route: '/(app)/habits' }
+		{ label: 'Hábitos', icon: 'habits', route: '/(app)/habits' },
+		{ label: 'Ajustes', icon: 'settings', route: '/(app)/settings' }
 	];
 </script>
 
