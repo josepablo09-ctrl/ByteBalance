@@ -10,7 +10,18 @@ import (
 	"bytebalance/internal/domain"
 )
 
-const maxNameLen = 100
+// Límites de un hábito y de sus registros. Las columnas de la base (TEXT,
+// INTEGER) admiten más; estos topes mantienen los datos razonables y evitan
+// que un valor fuera de rango llegue a PostgreSQL como error interno.
+const (
+	maxNameLen        = 100
+	maxDescriptionLen = 500
+	// MaxTargetCount es la meta máxima por periodo.
+	MaxTargetCount = 1000
+	// MaxLogCount es la cantidad máxima registrable en un día.
+	MaxLogCount = 1000
+	maxNoteLen  = 280
+)
 
 // ErrInactive indica que se intentó registrar progreso en un hábito pausado.
 var ErrInactive = fmt.Errorf("%w: el hábito está inactivo", domain.ErrInvalidInput)
@@ -109,8 +120,11 @@ func (h *Habit) Validate() error {
 	if !h.Frequency.Valid() {
 		return fmt.Errorf("%w: frecuencia %q inválida", domain.ErrInvalidInput, h.Frequency)
 	}
-	if h.TargetCount <= 0 {
-		return fmt.Errorf("%w: la meta debe ser mayor que cero", domain.ErrInvalidInput)
+	if utf8.RuneCountInString(h.Description) > maxDescriptionLen {
+		return fmt.Errorf("%w: la descripción admite hasta %d caracteres", domain.ErrInvalidInput, maxDescriptionLen)
+	}
+	if h.TargetCount <= 0 || h.TargetCount > MaxTargetCount {
+		return fmt.Errorf("%w: la meta debe estar entre 1 y %d", domain.ErrInvalidInput, MaxTargetCount)
 	}
 	if h.ReminderTime != nil && !h.ReminderTime.Valid() {
 		return fmt.Errorf("%w: hora de recordatorio inválida", domain.ErrInvalidInput)

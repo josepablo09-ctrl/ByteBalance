@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"bytebalance/internal/domain"
 )
@@ -46,8 +47,11 @@ func (l *Log) Validate() error {
 	if l.LoggedOn.IsZero() {
 		return fmt.Errorf("%w: falta la fecha del registro", domain.ErrInvalidInput)
 	}
-	if l.Count <= 0 {
-		return fmt.Errorf("%w: la cantidad debe ser mayor que cero", domain.ErrInvalidInput)
+	if l.Count <= 0 || l.Count > MaxLogCount {
+		return fmt.Errorf("%w: la cantidad debe estar entre 1 y %d", domain.ErrInvalidInput, MaxLogCount)
+	}
+	if utf8.RuneCountInString(l.Note) > maxNoteLen {
+		return fmt.Errorf("%w: la nota admite hasta %d caracteres", domain.ErrInvalidInput, maxNoteLen)
 	}
 	return nil
 }

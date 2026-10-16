@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -201,6 +202,8 @@ func TestHabitServiceLogCompletion(t *testing.T) {
 		{name: "hábito de otro usuario", userID: stranger.ID, habitID: active.ID, wantErr: domain.ErrNotFound},
 		{name: "hábito inexistente", userID: crUser.ID, habitID: domain.NewID(), wantErr: domain.ErrNotFound},
 		{name: "cantidad negativa", userID: crUser.ID, habitID: active.ID, in: LogCompletionInput{Count: -1}, wantErr: domain.ErrInvalidInput},
+		{name: "cantidad por encima del máximo", userID: crUser.ID, habitID: active.ID, in: LogCompletionInput{Count: habit.MaxLogCount + 1}, wantErr: domain.ErrInvalidInput},
+		{name: "nota demasiado larga", userID: crUser.ID, habitID: active.ID, in: LogCompletionInput{Note: strings.Repeat("x", 281)}, wantErr: domain.ErrInvalidInput},
 		{name: "error del repositorio", userID: crUser.ID, habitID: active.ID, upsertErr: errDB, wantErr: errDB},
 	}
 	for _, tt := range tests {
@@ -412,6 +415,8 @@ func TestHabitServiceUpdateHabit(t *testing.T) {
 		},
 		{name: "nombre vacío", userID: owner.ID, in: UpdateHabitInput{Name: str("  ")}, wantErr: domain.ErrInvalidInput},
 		{name: "meta cero", userID: owner.ID, in: UpdateHabitInput{TargetCount: num(0)}, wantErr: domain.ErrInvalidInput},
+		{name: "meta por encima del máximo", userID: owner.ID, in: UpdateHabitInput{TargetCount: num(habit.MaxTargetCount + 1)}, wantErr: domain.ErrInvalidInput},
+		{name: "descripción demasiado larga", userID: owner.ID, in: UpdateHabitInput{Description: str(strings.Repeat("x", 501))}, wantErr: domain.ErrInvalidInput},
 		{name: "frecuencia inválida", userID: owner.ID, in: UpdateHabitInput{Frequency: freq("hourly")}, wantErr: domain.ErrInvalidInput},
 		{name: "hábito de otro usuario", userID: stranger.ID, in: UpdateHabitInput{Name: str("x")}, wantErr: domain.ErrNotFound},
 	}

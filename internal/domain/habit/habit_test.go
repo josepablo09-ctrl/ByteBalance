@@ -39,6 +39,11 @@ func TestNew(t *testing.T) {
 		{name: "nombre demasiado largo", params: Params{UserID: userA, Name: strings.Repeat("x", 101)}, wantErr: true},
 		{name: "frecuencia inválida", params: Params{UserID: userA, Name: "Leer", Frequency: "yearly"}, wantErr: true},
 		{name: "meta negativa", params: Params{UserID: userA, Name: "Leer", TargetCount: -1}, wantErr: true},
+		{name: "meta máxima", params: Params{UserID: userA, Name: "Leer", TargetCount: MaxTargetCount}},
+		{name: "meta por encima del máximo", params: Params{UserID: userA, Name: "Leer", TargetCount: MaxTargetCount + 1}, wantErr: true},
+		// Se cuentan caracteres, no bytes: 500 "ñ" ocupan 1000 bytes y son válidas.
+		{name: "descripción en el límite", params: Params{UserID: userA, Name: "Leer", Description: strings.Repeat("ñ", 500)}},
+		{name: "descripción demasiado larga", params: Params{UserID: userA, Name: "Leer", Description: strings.Repeat("x", 501)}, wantErr: true},
 		{name: "hora inválida", params: Params{UserID: userA, Name: "Leer", ReminderTime: &TimeOfDay{Hour: 24}}, wantErr: true},
 		{name: "minuto inválido", params: Params{UserID: userA, Name: "Leer", ReminderTime: &TimeOfDay{Hour: 8, Minute: 60}}, wantErr: true},
 	}
@@ -113,5 +118,35 @@ func TestRecord(t *testing.T) {
 func TestErrInactiveIsInvalidInput(t *testing.T) {
 	if !errors.Is(ErrInactive, domain.ErrInvalidInput) {
 		t.Fatal("ErrInactive debe envolver domain.ErrInvalidInput")
+	}
+}
+
+func TestNewLogLimits(t *testing.T) {
+	day := time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name    string
+		count   int
+		note    string
+		wantErr bool
+	}{
+		{name: "cantidad máxima", count: MaxLogCount},
+		{name: "cantidad por encima del máximo", count: MaxLogCount + 1, wantErr: true},
+		{name: "nota en el límite", count: 1, note: strings.Repeat("ñ", 280)},
+		{name: "nota demasiado larga", count: 1, note: strings.Repeat("x", 281), wantErr: true},
+		{name: "los espacios de la nota no cuentan", count: 1, note: "  " + strings.Repeat("x", 280) + "  "},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewLog(habitA, day, tt.count, tt.note)
+			if tt.wantErr {
+				if !errors.Is(err, domain.ErrInvalidInput) {
+					t.Fatalf("NewLog() error = %v, se esperaba ErrInvalidInput", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("NewLog() error inesperado: %v", err)
+			}
+		})
 	}
 }
