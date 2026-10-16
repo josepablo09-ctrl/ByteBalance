@@ -98,7 +98,7 @@ func (a *api) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if ok, wait := a.loginLimits.allow(clientIP(r, a.opts.TrustedProxyHops), req.Email); !ok {
-		tooManyRequests(w, r, wait)
+		tooManyRequests(w, r, wait, "demasiados intentos de inicio de sesión; intenta de nuevo más tarde")
 		return
 	}
 

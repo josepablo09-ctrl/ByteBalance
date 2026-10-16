@@ -131,8 +131,8 @@ POSTGRES_PORT=5432
 DATABASE_URL=postgres://user:password@localhost:5432/bytebalance?sslmode=disable
 JWT_SECRET=                      # Obligatoria, mín. 32 bytes (openssl rand -base64 48)
 GEMINI_API_KEY=
-TELEGRAM_BOT_TOKEN=
-TELEGRAM_CHAT_ID=
+TELEGRAM_BOT_TOKEN=              # Opcional: token de @BotFather; vacío desactiva Telegram
+TELEGRAM_API_URL=                # Opcional: Bot API propia o simulada (por defecto la oficial)
 ```
 
 Frontend (`frontend/.env`, ver `frontend/.env.example`). Toda variable `VITE_*` se incrusta en el bundle público del navegador: **nunca** contiene secretos.

@@ -162,13 +162,13 @@ func clientIP(r *http.Request, trustedHops int) string {
 	return host
 }
 
-// tooManyRequests responde 429 indicando en Retry-After los segundos de espera.
-func tooManyRequests(w http.ResponseWriter, r *http.Request, wait time.Duration) {
-	// No se registran la IP ni el email: son datos personales.
-	slog.WarnContext(r.Context(), "intento de login limitado", "path", r.URL.Path)
+// tooManyRequests responde 429 con message, indicando en Retry-After los segundos de espera.
+func tooManyRequests(w http.ResponseWriter, r *http.Request, wait time.Duration, message string) {
+	// No se registran la IP, el email ni el usuario: son datos personales.
+	slog.WarnContext(r.Context(), "petición limitada", "path", r.URL.Path)
 	seconds := max(int(math.Ceil(wait.Seconds())), 1)
 	w.Header().Set("Retry-After", strconv.Itoa(seconds))
-	writeError(w, http.StatusTooManyRequests, "too_many_requests", "demasiados intentos de inicio de sesión; intenta de nuevo más tarde")
+	writeError(w, http.StatusTooManyRequests, "too_many_requests", message)
 }
 
 // clockOrDefault devuelve now, o time.Now si es nil.

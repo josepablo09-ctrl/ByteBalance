@@ -20,6 +20,8 @@ func respondError(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, http.StatusBadRequest, "bad_request", reqErr.msg)
 	case errors.Is(err, usecase.ErrInvalidCredentials):
 		writeError(w, http.StatusUnauthorized, "invalid_credentials", "email o contraseña incorrectos")
+	case errors.Is(err, usecase.ErrTelegramNotLinked):
+		writeError(w, http.StatusConflict, "telegram_not_linked", "tu cuenta no tiene Telegram vinculado")
 	case errors.Is(err, usecase.ErrEmailTaken):
 		writeError(w, http.StatusConflict, "email_taken", "el email ya está registrado")
 	case errors.Is(err, domain.ErrInvalidInput):

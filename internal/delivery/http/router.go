@@ -53,8 +53,11 @@ type Services struct {
 	Auth    AuthService
 	Finance FinanceService
 	Habits  HabitService
-	Tokens  TokenVerifier
-	DB      Pinger
+	// Telegram es nil si el servidor no tiene bot configurado; sus endpoints
+	// responden entonces 503.
+	Telegram TelegramService
+	Tokens   TokenVerifier
+	DB       Pinger
 }
 
 // Options configura el comportamiento transversal del router.
@@ -71,14 +74,20 @@ type Options struct {
 // api contiene los handlers REST; cada método atiende un endpoint.
 type api struct {
 	Services
-	opts        Options
-	loginLimits *loginThrottle
+	opts               Options
+	loginLimits        *loginThrottle
+	telegramLinkLimits *limiter
 }
 
 // NewRouter construye el handler HTTP con todas las rutas de la API v1.
 // Las rutas bajo /api/v1, salvo registro y login, exigen un token de acceso.
 func NewRouter(s Services, opts Options) http.Handler {
-	a := &api{Services: s, opts: opts, loginLimits: newLoginThrottle(time.Now)}
+	a := &api{
+		Services:           s,
+		opts:               opts,
+		loginLimits:        newLoginThrottle(time.Now),
+		telegramLinkLimits: newLimiter(telegramLinkBurst, telegramLinkInterval, time.Now),
+	}
 	protected := func(fn http.HandlerFunc) http.Handler { return requireAuth(s.Tokens, fn) }
 
 	mux := http.NewServeMux()
@@ -104,6 +113,11 @@ func NewRouter(s Services, opts Options) http.Handler {
 	mux.Handle("GET /api/v1/habits/{id}/logs", protected(a.listLogs))
 	mux.Handle("POST /api/v1/habits/{id}/logs", protected(a.logCompletion))
 	mux.Handle("DELETE /api/v1/habits/{id}/logs/{date}", protected(a.deleteLog))
+
+	mux.Handle("GET /api/v1/telegram", protected(a.telegramStatus))
+	mux.Handle("POST /api/v1/telegram/link", protected(a.createTelegramLink))
+	mux.Handle("DELETE /api/v1/telegram/link", protected(a.deleteTelegramLink))
+	mux.Handle("POST /api/v1/telegram/test", protected(a.sendTelegramTest))
 
 	return recoverPanics(cors(opts.AllowedOrigins, mux))
 }

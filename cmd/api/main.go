@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 	// Incluye la base de zonas horarias en el binario para que time.LoadLocation
@@ -20,18 +21,22 @@ import (
 
 	"bytebalance/internal/config"
 	httpdelivery "bytebalance/internal/delivery/http"
+	telegramdelivery "bytebalance/internal/delivery/telegram"
 	"bytebalance/internal/domain/finance"
 	"bytebalance/internal/domain/habit"
 	"bytebalance/internal/domain/user"
+	"bytebalance/internal/integration/telegram"
 	"bytebalance/internal/repository/postgres"
+	"bytebalance/internal/scheduler"
 	"bytebalance/internal/security"
 	"bytebalance/internal/usecase"
 )
 
 const (
-	dbConnectTimeout = 10 * time.Second
-	shutdownTimeout  = 10 * time.Second
-	accessTokenTTL   = 24 * time.Hour
+	dbConnectTimeout     = 10 * time.Second
+	telegramCheckTimeout = 10 * time.Second
+	shutdownTimeout      = 10 * time.Second
+	accessTokenTTL       = 24 * time.Hour
 )
 
 // repositories agrupa las implementaciones de persistencia que se inyectarán
@@ -42,6 +47,8 @@ type repositories struct {
 	transactions finance.TransactionRepository
 	habits       habit.Repository
 	habitLogs    habit.LogRepository
+	linkCodes    user.LinkCodeRepository
+	reminders    habit.ReminderRepository
 }
 
 func newRepositories(db postgres.DBTX) repositories {
@@ -51,34 +58,65 @@ func newRepositories(db postgres.DBTX) repositories {
 		transactions: postgres.NewTransactionRepository(db),
 		habits:       postgres.NewHabitRepository(db),
 		habitLogs:    postgres.NewHabitLogRepository(db),
+		linkCodes:    postgres.NewLinkCodeRepository(db),
+		reminders:    postgres.NewReminderRepository(db),
 	}
 }
 
-// newHandler construye los casos de uso sobre los repositorios y los expone
-// mediante el router HTTP.
-func newHandler(cfg config.Config, pool *pgxpool.Pool) (http.Handler, error) {
+// app es la aplicación armada: el handler HTTP y los procesos de fondo (bot de
+// Telegram y recordatorios), que corren hasta que se cancele su contexto.
+type app struct {
+	handler    http.Handler
+	background []func(ctx context.Context)
+}
+
+// newApp construye los casos de uso sobre los repositorios y los expone
+// mediante el router HTTP y, si hay bot configurado, mediante Telegram.
+func newApp(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) (app, error) {
 	repos := newRepositories(pool)
+	var a app
 
 	hasher, err := security.NewBcryptHasher(security.DefaultBcryptCost)
 	if err != nil {
-		return nil, fmt.Errorf("crear hasher de contraseñas: %w", err)
+		return app{}, fmt.Errorf("crear hasher de contraseñas: %w", err)
 	}
 	tokens, err := security.NewJWT([]byte(cfg.JWTSecret), accessTokenTTL, time.Now)
 	if err != nil {
-		return nil, fmt.Errorf("crear emisor de tokens: %w", err)
+		return app{}, fmt.Errorf("crear emisor de tokens: %w", err)
 	}
 
-	return httpdelivery.NewRouter(httpdelivery.Services{
+	services := httpdelivery.Services{
 		Users:   usecase.NewUserService(repos.users, hasher),
 		Auth:    usecase.NewAuthService(repos.users, hasher, tokens),
 		Finance: usecase.NewFinanceService(repos.categories, repos.transactions, repos.users, time.Now),
 		Habits:  usecase.NewHabitService(repos.habits, repos.habitLogs, repos.users, time.Now),
 		Tokens:  tokens,
 		DB:      pool,
-	}, httpdelivery.Options{
+	}
+
+	if cfg.TelegramEnabled() {
+		bot := telegram.NewClient(cfg.TelegramAPIURL, cfg.TelegramBotToken)
+		checkCtx, cancel := context.WithTimeout(ctx, telegramCheckTimeout)
+		me, err := bot.GetMe(checkCtx)
+		cancel()
+		if err != nil {
+			return app{}, fmt.Errorf("validar el bot de Telegram (revisa TELEGRAM_BOT_TOKEN): %w", err)
+		}
+		telegramService := usecase.NewTelegramService(repos.users, repos.linkCodes, bot, me.Username, time.Now)
+		services.Telegram = telegramService
+		poller := telegramdelivery.NewPoller(bot, telegramService)
+		reminders := scheduler.NewReminders(usecase.NewReminderService(repos.reminders, repos.habitLogs, bot), time.Now)
+		a.background = append(a.background, poller.Run, reminders.Run)
+		slog.Info("telegram activado", "bot", me.Username)
+	} else {
+		slog.Info("telegram desactivado: TELEGRAM_BOT_TOKEN vacía")
+	}
+
+	a.handler = httpdelivery.NewRouter(services, httpdelivery.Options{
 		AllowedOrigins:   cfg.CORSAllowedOrigins,
 		TrustedProxyHops: cfg.TrustedProxyHops,
-	}), nil
+	})
+	return a, nil
 }
 
 func main() {
@@ -107,14 +145,26 @@ func run() error {
 	}
 	defer pool.Close()
 
-	handler, err := newHandler(cfg, pool)
+	a, err := newApp(ctx, cfg, pool)
 	if err != nil {
 		return err
 	}
 
+	// Los procesos de fondo terminan al cancelar bgCtx; al salir se espera a que
+	// acaben para no cortar un envío a medias.
+	bgCtx, cancelBackground := context.WithCancel(ctx)
+	var background sync.WaitGroup
+	defer func() {
+		cancelBackground()
+		background.Wait()
+	}()
+	for _, job := range a.background {
+		background.Go(func() { job(bgCtx) })
+	}
+
 	srv := &http.Server{
 		Addr:              cfg.Addr(),
-		Handler:           handler,
+		Handler:           a.handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,
