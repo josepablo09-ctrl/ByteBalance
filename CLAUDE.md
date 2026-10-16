@@ -176,6 +176,13 @@ npm run lint                     # Lint
 npm run check                    # Verificación de tipos / svelte-check
 ```
 
+### Scripts de desarrollo (ver `scripts/README.md`)
+
+```bash
+go run ./scripts/cleanup-e2e        # Simula el borrado de usuarios de prueba e2e (solo BD local)
+go run ./scripts/cleanup-e2e -yes   # Los borra junto con todos sus datos
+```
+
 ### Migraciones (golang-migrate)
 
 ```bash
