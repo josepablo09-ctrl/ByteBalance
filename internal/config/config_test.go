@@ -12,6 +12,8 @@ import (
 const (
 	localDB   = "postgres://user:password@localhost:5432/bytebalance?sslmode=disable"
 	jwtSecret = "0123456789abcdef0123456789abcdef"
+	// telegramToken tiene el formato de BotFather pero es ficticio.
+	telegramToken = "123456789:AAFicticioFicticioFicticioFicticio12"
 )
 
 func lookupFrom(vars map[string]string) func(string) (string, bool) {
@@ -126,6 +128,31 @@ func TestParse(t *testing.T) {
 			wantErr: []string{"CORS_ALLOWED_ORIGINS"},
 		},
 		{
+			name: "con bot de Telegram",
+			vars: map[string]string{"DATABASE_URL": localDB, "JWT_SECRET": jwtSecret, "TELEGRAM_BOT_TOKEN": telegramToken},
+			want: Config{Env: EnvDevelopment, Port: 8080, DatabaseURL: localDB, JWTSecret: jwtSecret, TelegramBotToken: telegramToken},
+		},
+		{
+			name:    "token de Telegram con el texto de ejemplo",
+			vars:    map[string]string{"DATABASE_URL": localDB, "JWT_SECRET": jwtSecret, "TELEGRAM_BOT_TOKEN": "your-telegram-bot-token"},
+			wantErr: []string{"TELEGRAM_BOT_TOKEN", "BotFather"},
+		},
+		{
+			name: "Bot API simulada en local",
+			vars: map[string]string{"DATABASE_URL": localDB, "JWT_SECRET": jwtSecret, "TELEGRAM_API_URL": "http://localhost:8090/"},
+			want: Config{Env: EnvDevelopment, Port: 8080, DatabaseURL: localDB, JWTSecret: jwtSecret, TelegramAPIURL: "http://localhost:8090"},
+		},
+		{
+			name: "Bot API http remota en producción",
+			vars: map[string]string{
+				"APP_ENV":          "production",
+				"DATABASE_URL":     "postgres://app:secreto@db.internal:5432/bytebalance?sslmode=require",
+				"JWT_SECRET":       jwtSecret,
+				"TELEGRAM_API_URL": "http://localhost:8090",
+			},
+			wantErr: []string{"TELEGRAM_API_URL", "https"},
+		},
+		{
 			name:    "TRUSTED_PROXY_HOPS no numérico",
 			vars:    map[string]string{"DATABASE_URL": localDB, "JWT_SECRET": jwtSecret, "TRUSTED_PROXY_HOPS": "alb"},
 			wantErr: []string{"TRUSTED_PROXY_HOPS"},
@@ -148,6 +175,9 @@ func TestParse(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parse() error inesperado: %v", err)
 			}
+			if tt.want.TelegramAPIURL == "" {
+				tt.want.TelegramAPIURL = defaultTelegramAPIURL
+			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("parse() = %+v, se esperaba %+v", got, tt.want)
 			}
@@ -157,14 +187,15 @@ func TestParse(t *testing.T) {
 
 func TestParseNeverLeaksSecrets(t *testing.T) {
 	_, err := parse(lookupFrom(map[string]string{
-		"APP_ENV":      "production",
-		"DATABASE_URL": "postgres://app:superSecreta@db.internal/bytebalance?sslmode=disable",
-		"JWT_SECRET":   "jwtSecretoCorto",
+		"APP_ENV":            "production",
+		"DATABASE_URL":       "postgres://app:superSecreta@db.internal/bytebalance?sslmode=disable",
+		"JWT_SECRET":         "jwtSecretoCorto",
+		"TELEGRAM_BOT_TOKEN": "tokenTelegramSecretoMalFormado",
 	}))
 	if err == nil {
 		t.Fatal("se esperaba error por falta de TLS y secreto corto")
 	}
-	for _, secret := range []string{"superSecreta", "jwtSecretoCorto"} {
+	for _, secret := range []string{"superSecreta", "jwtSecretoCorto", "tokenTelegramSecretoMalFormado"} {
 		if strings.Contains(err.Error(), secret) {
 			t.Fatalf("el error expone un secreto (%s): %v", secret, err)
 		}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -27,10 +28,15 @@ const (
 	minJWTSecretLen = 32
 	// maxTrustedProxyHops acota TRUSTED_PROXY_HOPS a un valor razonable.
 	maxTrustedProxyHops = 10
+	// defaultTelegramAPIURL es la URL de la Bot API oficial.
+	defaultTelegramAPIURL = "https://api.telegram.org"
 )
 
 // sslmodes que cifran la conexión; obligatorios fuera de desarrollo.
 var secureSSLModes = []string{"require", "verify-ca", "verify-full"}
+
+// telegramTokenPattern es el formato de los tokens de BotFather: <id numérico>:<clave>.
+var telegramTokenPattern = regexp.MustCompile(`^[0-9]{5,}:[A-Za-z0-9_-]{30,}$`)
 
 // Config es la configuración validada de la aplicación.
 type Config struct {
@@ -53,6 +59,19 @@ type Config struct {
 	// API desde el navegador (CORS_ALLOWED_ORIGINS, separados por comas). Vacío
 	// desactiva CORS: solo se admiten peticiones del mismo origen.
 	CORSAllowedOrigins []string
+	// TelegramBotToken es el token del bot de BotFather (TELEGRAM_BOT_TOKEN).
+	// Vacío desactiva la integración con Telegram. Es un secreto: nunca debe
+	// registrarse en logs.
+	TelegramBotToken string
+	// TelegramAPIURL es la URL base de la Bot API (TELEGRAM_API_URL). Por
+	// defecto la oficial; se cambia para usar un servidor propio de la Bot API
+	// o uno simulado en pruebas locales.
+	TelegramAPIURL string
+}
+
+// TelegramEnabled indica si hay un bot de Telegram configurado.
+func (c Config) TelegramEnabled() bool {
+	return c.TelegramBotToken != ""
 }
 
 // IsDevelopment indica si la aplicación corre en el entorno local de desarrollo.
@@ -141,6 +160,20 @@ func parse(lookup func(string) (string, bool)) (Config, error) {
 	}
 	cfg.CORSAllowedOrigins = origins
 
+	cfg.TelegramBotToken = strings.TrimSpace(get("TELEGRAM_BOT_TOKEN"))
+	// No se incluye el valor en el mensaje: es un secreto.
+	if cfg.TelegramBotToken != "" && !telegramTokenPattern.MatchString(cfg.TelegramBotToken) {
+		errs = append(errs, errors.New("TELEGRAM_BOT_TOKEN no tiene el formato de BotFather (<id>:<clave>); déjala vacía para desactivar Telegram"))
+	}
+	cfg.TelegramAPIURL = defaultTelegramAPIURL
+	if raw := strings.TrimSpace(get("TELEGRAM_API_URL")); raw != "" {
+		apiURL, err := parseTelegramAPIURL(raw, cfg.Env)
+		if err != nil {
+			errs = append(errs, err)
+		}
+		cfg.TelegramAPIURL = apiURL
+	}
+
 	// No se incluye el valor en el mensaje: es un secreto.
 	if len(cfg.JWTSecret) < minJWTSecretLen {
 		errs = append(errs, fmt.Errorf("JWT_SECRET es obligatoria y debe tener al menos %d bytes (generar con: openssl rand -base64 48)", minJWTSecretLen))
@@ -150,6 +183,20 @@ func parse(lookup func(string) (string, bool)) (Config, error) {
 		return Config{}, fmt.Errorf("configuración inválida:\n%w", err)
 	}
 	return cfg, nil
+}
+
+// parseTelegramAPIURL valida TELEGRAM_API_URL: https, o http solo hacia
+// localhost en desarrollo (servidores simulados). Se devuelve sin barra final.
+func parseTelegramAPIURL(raw, env string) (string, error) {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
+		return "", fmt.Errorf("TELEGRAM_API_URL %q no es una URL http(s) válida", raw)
+	}
+	isLocal := u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1"
+	if u.Scheme == "http" && !(env == EnvDevelopment && isLocal) {
+		return "", fmt.Errorf("TELEGRAM_API_URL debe usar https (http solo hacia localhost en development)")
+	}
+	return strings.TrimRight(raw, "/"), nil
 }
 
 // parseOrigins interpreta una lista de orígenes separados por comas. Cada uno
