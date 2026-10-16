@@ -72,6 +72,14 @@ func (f *fakeUserRepo) Update(_ context.Context, u *user.User) error {
 	if _, ok := f.byID[u.ID]; !ok {
 		return domain.ErrNotFound
 	}
+	// Como el índice único de la base: un chat solo puede estar en un usuario.
+	if u.TelegramChatID != nil {
+		for id, other := range f.byID {
+			if id != u.ID && other.TelegramChatID != nil && *other.TelegramChatID == *u.TelegramChatID {
+				return domain.ErrConflict
+			}
+		}
+	}
 	f.updates++
 	f.byID[u.ID] = *u
 	return nil

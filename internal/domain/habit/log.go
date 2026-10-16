@@ -65,3 +65,17 @@ func DateOf(t time.Time) time.Time {
 	y, m, d := t.Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }
+
+// PeriodStart devuelve el primer día del periodo de la meta que contiene day
+// (una fecha normalizada con DateOf): el mismo día, el lunes de su semana ISO o
+// el primero de su mes.
+func PeriodStart(f Frequency, day time.Time) time.Time {
+	switch f {
+	case Weekly:
+		return day.AddDate(0, 0, -((int(day.Weekday()) + 6) % 7))
+	case Monthly:
+		return time.Date(day.Year(), day.Month(), 1, 0, 0, 0, 0, time.UTC)
+	default:
+		return day
+	}
+}

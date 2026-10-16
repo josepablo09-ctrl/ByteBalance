@@ -150,3 +150,27 @@ func TestNewLogLimits(t *testing.T) {
 		})
 	}
 }
+
+func TestPeriodStart(t *testing.T) {
+	date := func(m time.Month, d int) time.Time { return time.Date(2026, m, d, 0, 0, 0, 0, time.UTC) }
+	tests := []struct {
+		name string
+		f    Frequency
+		day  time.Time
+		want time.Time
+	}{
+		{name: "diario", f: Daily, day: date(10, 16), want: date(10, 16)},
+		{name: "semanal un viernes", f: Weekly, day: date(10, 16), want: date(10, 12)},
+		{name: "semanal un lunes", f: Weekly, day: date(10, 12), want: date(10, 12)},
+		{name: "semanal un domingo", f: Weekly, day: date(10, 18), want: date(10, 12)},
+		{name: "semana que cruza el mes", f: Weekly, day: date(11, 1), want: date(10, 26)},
+		{name: "mensual", f: Monthly, day: date(10, 16), want: date(10, 1)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := PeriodStart(tt.f, tt.day); !got.Equal(tt.want) {
+				t.Errorf("PeriodStart() = %s, se esperaba %s", got.Format(time.DateOnly), tt.want.Format(time.DateOnly))
+			}
+		})
+	}
+}
