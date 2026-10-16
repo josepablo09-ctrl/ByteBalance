@@ -28,13 +28,19 @@ const habitColumns = `id, user_id, name, COALESCE(description, ''), frequency, t
 	reminder_time, is_active, created_at, updated_at, deleted_at`
 
 func scanHabit(row pgx.Row) (habit.Habit, error) {
+	return scanHabitWith(row)
+}
+
+// scanHabitWith escanea las columnas de habitColumns seguidas de extra.
+func scanHabitWith(row pgx.Row, extra ...any) (habit.Habit, error) {
 	var (
 		h         habit.Habit
 		frequency string
 		reminder  pgtype.Time
 	)
-	err := row.Scan(uuidDst(&h.ID), uuidDst(&h.UserID), &h.Name, &h.Description, &frequency, &h.TargetCount,
-		&reminder, &h.IsActive, &h.CreatedAt, &h.UpdatedAt, &h.DeletedAt)
+	dest := []any{uuidDst(&h.ID), uuidDst(&h.UserID), &h.Name, &h.Description, &frequency, &h.TargetCount,
+		&reminder, &h.IsActive, &h.CreatedAt, &h.UpdatedAt, &h.DeletedAt}
+	err := row.Scan(append(dest, extra...)...)
 	if err != nil {
 		return habit.Habit{}, mapError(err)
 	}

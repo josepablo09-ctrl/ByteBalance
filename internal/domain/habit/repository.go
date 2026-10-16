@@ -36,3 +36,20 @@ type LogRepository interface {
 	ListByHabit(ctx context.Context, habitID domain.ID, from, to time.Time) ([]Log, error)
 	Delete(ctx context.Context, habitID domain.ID, loggedOn time.Time) error
 }
+
+// Reminder es un recordatorio a enviar: un hábito activo con recordatorio cuyo
+// dueño tiene Telegram vinculado.
+type Reminder struct {
+	Habit Habit
+	// Timezone es la zona horaria IANA del dueño, en la que se interpreta la hora.
+	Timezone string
+	ChatID   int64
+}
+
+// ReminderRepository busca los recordatorios que tocan en un momento dado.
+type ReminderRepository interface {
+	// ListDue devuelve los recordatorios cuya hora coincide con el minuto de at
+	// en la zona horaria de cada dueño. Excluye hábitos pausados o eliminados y
+	// usuarios sin Telegram vinculado.
+	ListDue(ctx context.Context, at time.Time) ([]Reminder, error)
+}
