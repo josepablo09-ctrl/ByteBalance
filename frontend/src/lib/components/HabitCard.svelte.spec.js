@@ -12,6 +12,7 @@ const TODAY = '2026-10-16';
 function renderCard(habit, counts = {}) {
 	const handlers = {
 		oncheckin: vi.fn(),
+		onundo: vi.fn(),
 		onlog: vi.fn(),
 		onedit: vi.fn(),
 		ontoggle: vi.fn(),
@@ -85,5 +86,24 @@ describe('HabitCard', () => {
 		await page.getByRole('button', { name: 'Eliminar' }).click();
 		expect(onedit).toHaveBeenCalledOnce();
 		expect(ondelete).toHaveBeenCalledOnce();
+	});
+
+	it('permite deshacer un "hecho" marcado por error', async () => {
+		const { onundo } = renderCard({}, { '2026-10-16': 1 });
+		await page.getByRole('button', { name: 'Deshacer el registro de hoy' }).click();
+		expect(onundo).toHaveBeenCalledOnce();
+	});
+
+	it('en un hábito que suma, permite quitar 1 al registro de hoy', async () => {
+		const { onundo } = renderCard({ target_count: 8 }, { '2026-10-16': 3 });
+		await page.getByRole('button', { name: 'Quitar 1 al registro de hoy' }).click();
+		expect(onundo).toHaveBeenCalledOnce();
+	});
+
+	it('no ofrece deshacer si hoy no hay registro', async () => {
+		renderCard({});
+		await expect
+			.element(page.getByRole('button', { name: /Deshacer|Quitar 1/ }))
+			.not.toBeInTheDocument();
 	});
 });

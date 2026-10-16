@@ -6,13 +6,15 @@
 	import TextField from './TextField.svelte';
 
 	/**
-	 * Registra (o corrige) cuántas veces se cumplió un hábito en un día. El
-	 * backend guarda un registro por día: el nuevo valor reemplaza al anterior.
+	 * Registra, corrige o borra cuántas veces se cumplió un hábito en un día. El
+	 * backend guarda un registro por día: el nuevo valor reemplaza al anterior, y
+	 * 0 lo borra.
 	 *
 	 * @typedef {object} Props
 	 * @property {import('#lib/api/habits.js').HabitLog[]} logs Registros ya cargados, para precargar el día.
 	 * @property {string} today `YYYY-MM-DD` en la zona del usuario.
-	 * @property {(input: import('#lib/api/habits.js').LogInput) => Promise<void>} onSubmit
+	 * @property {(action: Exclude<import('#lib/habits.js').LogAction, { errors: object }>) => Promise<void>} onSubmit
+	 *   Guarda (`input`) o borra (`remove`) el día; si falla debe lanzar el error de la API.
 	 * @property {() => void} oncancel
 	 */
 
@@ -29,20 +31,26 @@
 	let isSubmitting = $state(false);
 
 	const existing = $derived(countOn(logs, date));
+	const isRemoving = $derived(count.trim() === '0' && existing > 0);
 
-	/** Al elegir otro día, propone lo ya registrado para poder corregirlo. */
-	function handleDateInput() {
-		errors.date = undefined;
+	/** Propone lo ya registrado en el día elegido, para poder corregirlo. */
+	function prefill() {
 		const found = logs.find((l) => l.date === date);
 		count = String(found?.count ?? 1);
 		note = found?.note ?? '';
+	}
+	prefill();
+
+	function handleDateInput() {
+		errors.date = undefined;
+		prefill();
 	}
 
 	/** @param {SubmitEvent} event */
 	async function handleSubmit(event) {
 		event.preventDefault();
 		formError = '';
-		const result = buildLogInput({ date, count, note }, today);
+		const result = buildLogInput({ date, count, note }, { today, existingCount: existing });
 		if (result.errors) {
 			errors = result.errors;
 			return;
@@ -50,7 +58,7 @@
 		errors = {};
 		isSubmitting = true;
 		try {
-			await onSubmit(result.input);
+			await onSubmit(result);
 		} catch (err) {
 			formError = errorMessage(err);
 		} finally {
@@ -86,7 +94,7 @@
 	{#if existing > 0}
 		<p class="text-xs text-zinc-500">
 			Ese día ya tiene {existing === 1 ? '1 vez registrada' : `${existing} veces registradas`}; lo
-			que guardes lo reemplaza.
+			que guardes lo reemplaza. Usa 0 para borrarlo.
 		</p>
 	{/if}
 
@@ -102,6 +110,8 @@
 
 	<div class="flex justify-end gap-2 border-t border-zinc-800 pt-5">
 		<Button variant="secondary" onclick={oncancel}>Cancelar</Button>
-		<Button type="submit" loading={isSubmitting}>{isSubmitting ? 'Guardando…' : 'Guardar'}</Button>
+		<Button type="submit" variant={isRemoving ? 'danger' : 'primary'} loading={isSubmitting}>
+			{isSubmitting ? 'Guardando…' : isRemoving ? 'Borrar registro' : 'Guardar'}
+		</Button>
 	</div>
 </form>

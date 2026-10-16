@@ -47,6 +47,12 @@ describe('createHabitsApi', () => {
 		expect(client.post).toHaveBeenCalledWith('/habits/h1/logs', {});
 	});
 
+	it('borra el registro de un día con DELETE', async () => {
+		const client = fakeClient(null);
+		await createHabitsApi(client).deleteLog('h1', '2026-10-16');
+		expect(client.delete).toHaveBeenCalledWith('/habits/h1/logs/2026-10-16');
+	});
+
 	it('codifica el id en la ruta', async () => {
 		const client = fakeClient({ logs: [] });
 		await createHabitsApi(client).listLogs('a/b');

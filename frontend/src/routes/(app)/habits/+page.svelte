@@ -109,6 +109,16 @@
 	}
 
 	/**
+	 * Quita localmente el registro de un día ya borrado en el backend.
+	 *
+	 * @param {string} habitId
+	 * @param {string} date
+	 */
+	function dropLog(habitId, date) {
+		logsByHabit[habitId] = (logsByHabit[habitId] ?? []).filter((l) => l.date !== date);
+	}
+
+	/**
 	 * Ejecuta una acción sobre un hábito marcándolo como ocupado; un error se
 	 * muestra arriba de la lista.
 	 *
@@ -135,6 +145,27 @@
 				count: countOn(logsOf(habit), today) + 1
 			});
 			storeLog(log);
+		});
+	}
+
+	/**
+	 * Deshace la última vez registrada hoy: resta una, y si solo había una borra
+	 * el registro para dejar el día en cero.
+	 *
+	 * @param {Habit} habit
+	 */
+	function undo(habit) {
+		return withBusy(habit, async () => {
+			const current = logsOf(habit).find((l) => l.date === today);
+			if (!current) return;
+			if (current.count > 1) {
+				storeLog(
+					await habitsApi.logCompletion(habit.id, { count: current.count - 1, note: current.note })
+				);
+			} else {
+				await habitsApi.deleteLog(habit.id, today);
+				dropLog(habit.id, today);
+			}
 		});
 	}
 
@@ -165,12 +196,19 @@
 		formTarget = null;
 	}
 
-	/** @param {import('#lib/api/habits.js').LogInput} input */
-	async function saveLog(input) {
-		if (!logTarget) return;
-		storeLog(await habitsApi.logCompletion(logTarget.id, input));
+	/** @param {Exclude<import('#lib/habits.js').LogAction, { errors: object }>} action */
+	async function saveLog(action) {
+		const habit = logTarget;
+		if (!habit) return;
+		if (action.remove) {
+			await habitsApi.deleteLog(habit.id, action.remove);
+			dropLog(habit.id, action.remove);
+			showNotice('Registro borrado.');
+		} else if (action.input) {
+			storeLog(await habitsApi.logCompletion(habit.id, action.input));
+			showNotice('Registro guardado.');
+		}
 		logTarget = null;
-		showNotice('Registro guardado.');
 	}
 
 	async function confirmDelete() {
@@ -298,6 +336,7 @@
 							{today}
 							isBusy={busyIds.has(habit.id)}
 							oncheckin={() => checkIn(habit)}
+							onundo={() => undo(habit)}
 							onlog={() => (logTarget = habit)}
 							onedit={() => (formTarget = { habit })}
 							ontoggle={() => toggleActive(habit)}

@@ -167,11 +167,11 @@ export function describeGoal({ frequency, target_count }) {
  * @property {string} reminderTime `HH:MM`
  */
 
-/** @param {string} value @param {number} max */
-function parseCount(value, max) {
+/** @param {string} value @param {number} min @param {number} max */
+function parseCount(value, min, max) {
 	if (!/^\d+$/.test(value.trim())) return undefined;
 	const n = Number(value);
-	return n >= 1 && n <= max ? n : undefined;
+	return n >= min && n <= max ? n : undefined;
 }
 
 /**
@@ -188,7 +188,7 @@ export function buildHabitInput(draft) {
 	const errors = {};
 	const name = draft.name.trim();
 	const description = draft.description.trim();
-	const target = parseCount(draft.target, MAX_TARGET);
+	const target = parseCount(draft.target, 1, MAX_TARGET);
 
 	if (!name) errors.name = 'Ponle un nombre.';
 	else if ([...name].length > MAX_NAME_LENGTH)
@@ -214,26 +214,35 @@ export function buildHabitInput(draft) {
 }
 
 /**
- * Valida el formulario de registro de un día.
+ * @typedef {{ input: import('./api/habits.js').LogInput & { date: string }, remove?: undefined, errors?: undefined }
+ *   | { remove: string, input?: undefined, errors?: undefined }
+ *   | { errors: Partial<Record<'date' | 'count' | 'note', string>>, input?: undefined, remove?: undefined }} LogAction
+ */
+
+/**
+ * Valida el formulario de registro de un día. Una cantidad de 0 significa
+ * borrar el registro de ese día (`remove`), lo que solo tiene sentido si existe.
  *
  * @param {{ date: string, count: string, note: string }} draft
- * @param {string} today
- * @returns {{ input: import('./api/habits.js').LogInput, errors?: undefined }
- *   | { input?: undefined, errors: Partial<Record<'date' | 'count' | 'note', string>> }}
+ * @param {{ today: string, existingCount: number }} context Cantidad ya registrada ese día.
+ * @returns {LogAction}
  */
-export function buildLogInput(draft, today) {
+export function buildLogInput(draft, { today, existingCount }) {
 	/** @type {Partial<Record<'date' | 'count' | 'note', string>>} */
 	const errors = {};
-	const count = parseCount(draft.count, MAX_COUNT);
+	const count = parseCount(draft.count, 0, MAX_COUNT);
 	const note = draft.note.trim();
 
 	if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.date)) errors.date = 'Elige una fecha.';
 	else if (draft.date > today) errors.date = 'No puedes registrar un día futuro.';
-	if (count === undefined) errors.count = `Usa un número entero entre 1 y ${MAX_COUNT}.`;
+	if (count === undefined) errors.count = `Usa un número entero entre 0 y ${MAX_COUNT}.`;
+	else if (count === 0 && existingCount === 0)
+		errors.count = 'Ese día no tiene registro que borrar.';
 	if ([...note].length > MAX_NOTE_LENGTH) {
 		errors.note = `Usa como máximo ${MAX_NOTE_LENGTH} caracteres.`;
 	}
 
 	if (Object.keys(errors).length > 0 || count === undefined) return { errors };
+	if (count === 0) return { remove: draft.date };
 	return { input: { date: draft.date, count, note } };
 }

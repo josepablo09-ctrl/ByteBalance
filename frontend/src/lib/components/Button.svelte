@@ -21,7 +21,7 @@
 	 * @property {import('svelte').Snippet} children
 	 */
 
-	/** @type {Props} */
+	/** @type {Props & { 'aria-label'?: string }} Admite un nombre accesible si el texto visible no basta. */
 	let {
 		type = 'button',
 		variant = 'primary',
@@ -29,6 +29,7 @@
 		disabled = false,
 		class: className = '',
 		onclick,
+		'aria-label': ariaLabel,
 		children
 	} = $props();
 </script>
@@ -36,6 +37,7 @@
 <button
 	{type}
 	{onclick}
+	aria-label={ariaLabel}
 	disabled={disabled || loading}
 	aria-busy={loading || undefined}
 	class={[

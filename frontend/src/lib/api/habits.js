@@ -101,7 +101,18 @@ export function createHabitsApi(client) {
 		 * @param {LogInput} [input]
 		 * @returns {Promise<HabitLog>}
 		 */
-		logCompletion: (id, input = {}) => client.post(`/habits/${encodeURIComponent(id)}/logs`, input)
+		logCompletion: (id, input = {}) => client.post(`/habits/${encodeURIComponent(id)}/logs`, input),
+
+		/**
+		 * Borra el registro de un día (lo deja en cero).
+		 *
+		 * @param {string} id
+		 * @param {string} date `YYYY-MM-DD`
+		 * @returns {Promise<void>}
+		 */
+		async deleteLog(id, date) {
+			await client.delete(`/habits/${encodeURIComponent(id)}/logs/${encodeURIComponent(date)}`);
+		}
 	};
 }
 

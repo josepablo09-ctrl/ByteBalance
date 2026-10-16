@@ -169,14 +169,29 @@ describe('buildHabitInput', () => {
 });
 
 describe('buildLogInput', () => {
+	const empty = { today: TODAY, existingCount: 0 };
+	const logged = { today: TODAY, existingCount: 2 };
+
 	it('acepta un día pasado', () => {
-		expect(buildLogInput({ date: '2026-10-10', count: '2', note: ' bien ' }, TODAY)).toEqual({
+		expect(buildLogInput({ date: '2026-10-10', count: '2', note: ' bien ' }, empty)).toEqual({
 			input: { date: '2026-10-10', count: 2, note: 'bien' }
 		});
 	});
 
-	it('rechaza días futuros y cantidades inválidas', () => {
-		const { errors } = buildLogInput({ date: '2026-10-17', count: '0', note: '' }, TODAY);
+	it('0 borra el registro existente de ese día', () => {
+		expect(buildLogInput({ date: '2026-10-10', count: '0', note: '' }, logged)).toEqual({
+			remove: '2026-10-10'
+		});
+	});
+
+	it('0 en un día sin registro es un error', () => {
+		expect(buildLogInput({ date: '2026-10-10', count: '0', note: '' }, empty).errors?.count).toBe(
+			'Ese día no tiene registro que borrar.'
+		);
+	});
+
+	it('rechaza días futuros y cantidades fuera de rango', () => {
+		const { errors } = buildLogInput({ date: '2026-10-17', count: '1001', note: '' }, empty);
 		expect(Object.keys(errors ?? {}).sort()).toEqual(['count', 'date']);
 	});
 });

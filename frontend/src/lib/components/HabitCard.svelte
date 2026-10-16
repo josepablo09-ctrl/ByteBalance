@@ -20,6 +20,7 @@
 	 * @property {string} today `YYYY-MM-DD` en la zona del usuario.
 	 * @property {boolean} [isBusy] Hay una acción en curso sobre este hábito.
 	 * @property {() => void} oncheckin Suma una vez al día de hoy.
+	 * @property {() => void} onundo Resta una vez al día de hoy (en 1 lo deja en cero).
 	 * @property {() => void} onlog Abre el registro de otro día.
 	 * @property {() => void} onedit
 	 * @property {() => void} ontoggle Pausa o reanuda.
@@ -33,6 +34,7 @@
 		today,
 		isBusy = false,
 		oncheckin,
+		onundo,
 		onlog,
 		onedit,
 		ontoggle,
@@ -171,6 +173,17 @@
 						<Icon name="plus" class="size-3.5" />
 						Sumar 1 hoy
 					{/if}
+				</Button>
+			{/if}
+			{#if todayCount > 0}
+				<Button
+					variant="ghost"
+					class="h-8 px-2.5 text-xs"
+					disabled={isBusy}
+					onclick={onundo}
+					aria-label={isSingleDaily ? 'Deshacer el registro de hoy' : 'Quitar 1 al registro de hoy'}
+				>
+					{isSingleDaily ? 'Deshacer' : 'Quitar 1'}
 				</Button>
 			{/if}
 			<Button variant="ghost" class="h-8 px-2.5 text-xs" onclick={onlog}>Registrar otro día</Button>
