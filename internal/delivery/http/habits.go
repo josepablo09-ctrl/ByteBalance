@@ -1,6 +1,7 @@
 package http
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -45,6 +46,27 @@ func newHabitResponse(h *habit.Habit) habitResponse {
 		resp.ReminderTime = &s
 	}
 	return resp
+}
+
+// updateHabitRequest usa punteros para distinguir "no enviado" de "vacío".
+// ReminderTime se lee en crudo para distinguir además "no enviado" (no cambia)
+// de null (quita el recordatorio).
+type updateHabitRequest struct {
+	Name         *string         `json:"name"`
+	Description  *string         `json:"description"`
+	Frequency    *string         `json:"frequency"`
+	TargetCount  *int            `json:"target_count"`
+	ReminderTime json.RawMessage `json:"reminder_time"`
+	IsActive     *bool           `json:"is_active"`
+}
+
+// parseReminder interpreta una hora HH:MM.
+func parseReminder(raw string) (*habit.TimeOfDay, error) {
+	t, err := time.Parse("15:04", raw)
+	if err != nil {
+		return nil, badRequest("reminder_time debe tener formato HH:MM")
+	}
+	return &habit.TimeOfDay{Hour: t.Hour(), Minute: t.Minute()}, nil
 }
 
 type logCompletionRequest struct {
@@ -141,12 +163,12 @@ func (a *api) createHabit(w http.ResponseWriter, r *http.Request) {
 		TargetCount: req.TargetCount,
 	}
 	if req.ReminderTime != nil {
-		t, err := time.Parse("15:04", *req.ReminderTime)
+		reminder, err := parseReminder(*req.ReminderTime)
 		if err != nil {
-			respondError(w, r, badRequest("reminder_time debe tener formato HH:MM"))
+			respondError(w, r, err)
 			return
 		}
-		in.ReminderTime = &habit.TimeOfDay{Hour: t.Hour(), Minute: t.Minute()}
+		in.ReminderTime = reminder
 	}
 
 	h, err := a.Habits.CreateHabit(r.Context(), userIDFrom(r), in)
@@ -186,4 +208,69 @@ func (a *api) logCompletion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, newHabitLogResponse(l))
+}
+
+// updateHabit atiende PATCH /api/v1/habits/{id}. Solo modifica los campos
+// enviados; is_active=false pausa el hábito y true lo reanuda.
+func (a *api) updateHabit(w http.ResponseWriter, r *http.Request) {
+	habitID, err := pathID(r, "id")
+	if err != nil {
+		respondError(w, r, err)
+		return
+	}
+	var req updateHabitRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		respondError(w, r, err)
+		return
+	}
+
+	in := usecase.UpdateHabitInput{
+		Name:        req.Name,
+		Description: req.Description,
+		TargetCount: req.TargetCount,
+		IsActive:    req.IsActive,
+	}
+	if req.Frequency != nil {
+		f := habit.Frequency(*req.Frequency)
+		in.Frequency = &f
+	}
+	if len(req.ReminderTime) > 0 {
+		in.SetReminder = true
+		if string(req.ReminderTime) != "null" {
+			var raw string
+			if err := json.Unmarshal(req.ReminderTime, &raw); err != nil {
+				respondError(w, r, badRequest("reminder_time debe ser una hora HH:MM o null"))
+				return
+			}
+			if in.ReminderTime, err = parseReminder(raw); err != nil {
+				respondError(w, r, err)
+				return
+			}
+		}
+	}
+	if in == (usecase.UpdateHabitInput{}) {
+		respondError(w, r, badRequest("indica al menos uno de: name, description, frequency, target_count, reminder_time, is_active"))
+		return
+	}
+
+	h, err := a.Habits.UpdateHabit(r.Context(), userIDFrom(r), habitID, in)
+	if err != nil {
+		respondError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, newHabitResponse(h))
+}
+
+// deleteHabit atiende DELETE /api/v1/habits/{id}. Responde 204 sin cuerpo.
+func (a *api) deleteHabit(w http.ResponseWriter, r *http.Request) {
+	habitID, err := pathID(r, "id")
+	if err != nil {
+		respondError(w, r, err)
+		return
+	}
+	if err := a.Habits.DeleteHabit(r.Context(), userIDFrom(r), habitID); err != nil {
+		respondError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

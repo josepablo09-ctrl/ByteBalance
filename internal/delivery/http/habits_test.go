@@ -263,3 +263,138 @@ func TestListLogs(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateHabit(t *testing.T) {
+	habitID := domain.NewID()
+	path := "/api/v1/habits/" + habitID.String()
+	echo := func(check func(usecase.UpdateHabitInput)) func(domain.ID, domain.ID, usecase.UpdateHabitInput) (*habit.Habit, error) {
+		return func(userID, gotHabit domain.ID, in usecase.UpdateHabitInput) (*habit.Habit, error) {
+			if userID != testUserID || gotHabit != habitID {
+				t.Errorf("UpdateHabit(%v, %v)", userID, gotHabit)
+			}
+			check(in)
+			h := &habit.Habit{ID: habitID, Name: "Leer", Frequency: habit.Daily, TargetCount: 1, IsActive: true, ReminderTime: in.ReminderTime}
+			if in.IsActive != nil {
+				h.IsActive = *in.IsActive
+			}
+			return h, nil
+		}
+	}
+
+	tests := []struct {
+		name       string
+		target     string
+		body       string
+		updateFn   func(domain.ID, domain.ID, usecase.UpdateHabitInput) (*habit.Habit, error)
+		wantStatus int
+		wantBody   map[string]any
+	}{
+		{
+			name:   "pausa",
+			target: path,
+			body:   `{"is_active":false}`,
+			updateFn: echo(func(in usecase.UpdateHabitInput) {
+				if in.IsActive == nil || *in.IsActive || in.SetReminder || in.Name != nil {
+					t.Errorf("UpdateHabitInput = %+v", in)
+				}
+			}),
+			wantStatus: http.StatusOK,
+			wantBody:   map[string]any{"is_active": false},
+		},
+		{
+			name:   "cambia el recordatorio",
+			target: path,
+			body:   `{"reminder_time":"21:30","target_count":2,"frequency":"weekly"}`,
+			updateFn: echo(func(in usecase.UpdateHabitInput) {
+				if !in.SetReminder || in.ReminderTime == nil || *in.ReminderTime != (habit.TimeOfDay{Hour: 21, Minute: 30}) {
+					t.Errorf("recordatorio = %+v", in)
+				}
+				if in.TargetCount == nil || *in.TargetCount != 2 || in.Frequency == nil || *in.Frequency != habit.Weekly {
+					t.Errorf("UpdateHabitInput = %+v", in)
+				}
+			}),
+			wantStatus: http.StatusOK,
+			wantBody:   map[string]any{"reminder_time": "21:30"},
+		},
+		{
+			name:   "null quita el recordatorio",
+			target: path,
+			body:   `{"reminder_time":null}`,
+			updateFn: echo(func(in usecase.UpdateHabitInput) {
+				if !in.SetReminder || in.ReminderTime != nil {
+					t.Errorf("UpdateHabitInput = %+v", in)
+				}
+			}),
+			wantStatus: http.StatusOK,
+			wantBody:   map[string]any{"reminder_time": nil},
+		},
+		{name: "sin campos", target: path, body: `{}`, wantStatus: http.StatusBadRequest},
+		{name: "hora inválida", target: path, body: `{"reminder_time":"7pm"}`, wantStatus: http.StatusBadRequest},
+		{name: "recordatorio no textual", target: path, body: `{"reminder_time":730}`, wantStatus: http.StatusBadRequest},
+		{name: "campo desconocido", target: path, body: `{"color":"rojo"}`, wantStatus: http.StatusBadRequest},
+		{name: "id inválido", target: "/api/v1/habits/no-uuid", body: `{"is_active":true}`, wantStatus: http.StatusBadRequest},
+		{
+			name:   "valor inválido para el dominio",
+			target: path,
+			body:   `{"target_count":0}`,
+			updateFn: func(domain.ID, domain.ID, usecase.UpdateHabitInput) (*habit.Habit, error) {
+				return nil, fmt.Errorf("actualizar hábito: %w: la meta debe ser mayor que cero", domain.ErrInvalidInput)
+			},
+			wantStatus: http.StatusUnprocessableEntity,
+		},
+		{
+			name:   "hábito de otro usuario",
+			target: path,
+			body:   `{"is_active":true}`,
+			updateFn: func(domain.ID, domain.ID, usecase.UpdateHabitInput) (*habit.Habit, error) {
+				return nil, fmt.Errorf("actualizar hábito: %w", domain.ErrNotFound)
+			},
+			wantStatus: http.StatusNotFound,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestRouter(Services{Habits: stubHabits{updateHabit: tt.updateFn}})
+			rec := do(h, http.MethodPatch, tt.target, tt.body, true)
+			expectStatus(t, rec, tt.wantStatus)
+			if tt.wantBody == nil {
+				return
+			}
+			body := decodeJSONBody(t, rec)
+			for k, v := range tt.wantBody {
+				if body[k] != v {
+					t.Errorf("%s = %v, se esperaba %v", k, body[k], v)
+				}
+			}
+		})
+	}
+}
+
+func TestDeleteHabit(t *testing.T) {
+	habitID := domain.NewID()
+	tests := []struct {
+		name       string
+		target     string
+		deleteErr  error
+		wantStatus int
+	}{
+		{name: "elimina", target: "/api/v1/habits/" + habitID.String(), wantStatus: http.StatusNoContent},
+		{name: "inexistente", target: "/api/v1/habits/" + habitID.String(), deleteErr: fmt.Errorf("eliminar hábito: %w", domain.ErrNotFound), wantStatus: http.StatusNotFound},
+		{name: "id inválido", target: "/api/v1/habits/no-uuid", wantStatus: http.StatusBadRequest},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestRouter(Services{Habits: stubHabits{deleteHabit: func(userID, gotHabit domain.ID) error {
+				if userID != testUserID || gotHabit != habitID {
+					t.Errorf("DeleteHabit(%v, %v)", userID, gotHabit)
+				}
+				return tt.deleteErr
+			}}})
+			rec := do(h, http.MethodDelete, tt.target, "", true)
+			expectStatus(t, rec, tt.wantStatus)
+			if tt.wantStatus == http.StatusNoContent && rec.Body.Len() != 0 {
+				t.Errorf("un 204 no debe tener cuerpo: %q", rec.Body.String())
+			}
+		})
+	}
+}

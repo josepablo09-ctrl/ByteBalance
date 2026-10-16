@@ -122,6 +122,8 @@ type stubHabits struct {
 	createHabit   func(domain.ID, usecase.CreateHabitInput) (*habit.Habit, error)
 	listHabits    func(domain.ID, bool) ([]habit.Habit, error)
 	listLogs      func(domain.ID, domain.ID, time.Time, time.Time) ([]habit.Log, error)
+	updateHabit   func(domain.ID, domain.ID, usecase.UpdateHabitInput) (*habit.Habit, error)
+	deleteHabit   func(domain.ID, domain.ID) error
 	logCompletion func(domain.ID, domain.ID, usecase.LogCompletionInput) (*habit.Log, error)
 }
 
@@ -225,4 +227,18 @@ func expectStatus(t *testing.T, rec *httptest.ResponseRecorder, want int) {
 	if rec.Code != want {
 		t.Fatalf("status = %d, se esperaba %d; body: %s", rec.Code, want, rec.Body.String())
 	}
+}
+
+func (s stubHabits) UpdateHabit(_ context.Context, userID, habitID domain.ID, in usecase.UpdateHabitInput) (*habit.Habit, error) {
+	if s.updateHabit == nil {
+		return nil, errNotStubbed
+	}
+	return s.updateHabit(userID, habitID, in)
+}
+
+func (s stubHabits) DeleteHabit(_ context.Context, userID, habitID domain.ID) error {
+	if s.deleteHabit == nil {
+		return errNotStubbed
+	}
+	return s.deleteHabit(userID, habitID)
 }

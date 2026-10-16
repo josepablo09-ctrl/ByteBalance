@@ -39,6 +39,8 @@ type HabitService interface {
 	CreateHabit(ctx context.Context, userID domain.ID, in usecase.CreateHabitInput) (*habit.Habit, error)
 	ListHabits(ctx context.Context, userID domain.ID, activeOnly bool) ([]habit.Habit, error)
 	ListLogs(ctx context.Context, userID, habitID domain.ID, from, to time.Time) ([]habit.Log, error)
+	UpdateHabit(ctx context.Context, userID, habitID domain.ID, in usecase.UpdateHabitInput) (*habit.Habit, error)
+	DeleteHabit(ctx context.Context, userID, habitID domain.ID) error
 	LogCompletion(ctx context.Context, userID, habitID domain.ID, in usecase.LogCompletionInput) (*habit.Log, error)
 }
 
@@ -92,6 +94,8 @@ func NewRouter(s Services, opts Options) http.Handler {
 
 	mux.Handle("GET /api/v1/habits", protected(a.listHabits))
 	mux.Handle("POST /api/v1/habits", protected(a.createHabit))
+	mux.Handle("PATCH /api/v1/habits/{id}", protected(a.updateHabit))
+	mux.Handle("DELETE /api/v1/habits/{id}", protected(a.deleteHabit))
 	mux.Handle("GET /api/v1/habits/{id}/logs", protected(a.listLogs))
 	mux.Handle("POST /api/v1/habits/{id}/logs", protected(a.logCompletion))
 
