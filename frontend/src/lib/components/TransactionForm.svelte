@@ -2,6 +2,7 @@
 	import { errorMessage } from '#lib/api/errors.js';
 	import { currencyOptions } from '#lib/currencies.js';
 	import { todayInZone } from '#lib/dates.js';
+	import { centsToDecimal } from '#lib/money.js';
 	import {
 		buildTransactionInput,
 		MAX_CATEGORY_NAME_LENGTH,
@@ -30,26 +31,33 @@
 	 * @property {Category[]} categories
 	 * @property {string} defaultCurrency
 	 * @property {string} timeZone Zona horaria del usuario.
+	 * @property {import('#lib/api/finance.js').Transaction} [transaction] Si se indica, se edita.
 	 * @property {(input: import('#lib/api/finance.js').RecordTransactionInput) => Promise<void>} onSubmit
-	 *   Registra la transacción; si falla debe lanzar el error de la API.
+	 *   Registra (o guarda los cambios de) la transacción; si falla debe lanzar el error de la API.
 	 * @property {(name: string, type: EntryType) => Promise<Category>} onCreateCategory
 	 * @property {() => void} oncancel
 	 */
 
 	/** @type {Props} */
-	let { categories, defaultCurrency, timeZone, onSubmit, onCreateCategory, oncancel } = $props();
+	let { categories, defaultCurrency, timeZone, transaction, onSubmit, onCreateCategory, oncancel } =
+		$props();
 
 	const today = $derived(todayInZone(timeZone));
 
-	let type = $state(/** @type {EntryType} */ ('expense'));
-	let amount = $state('');
-	// La moneda inicial es la del usuario; después la elige el formulario.
+	// Los valores iniciales se toman una vez: después pertenecen al formulario.
 	// svelte-ignore state_referenced_locally
-	let currency = $state(defaultCurrency);
-	let categoryId = $state('');
-	let description = $state('');
+	const initial = transaction;
 	// svelte-ignore state_referenced_locally
-	let date = $state(todayInZone(timeZone));
+	const originalDate = initial ? todayInZone(timeZone, new Date(initial.occurred_at)) : undefined;
+
+	let type = $state(/** @type {EntryType} */ (initial?.type ?? 'expense'));
+	let amount = $state(initial ? centsToDecimal(initial.amount_cents) : '');
+	// svelte-ignore state_referenced_locally
+	let currency = $state(initial?.currency ?? defaultCurrency);
+	let categoryId = $state(initial?.category_id ?? '');
+	let description = $state(initial?.description ?? '');
+	// svelte-ignore state_referenced_locally
+	let date = $state(originalDate ?? todayInZone(timeZone));
 
 	/** @type {Partial<Record<string, string>>} */
 	let errors = $state({});
@@ -114,7 +122,7 @@
 		formError = '';
 		const result = buildTransactionInput(
 			{ type, amount, currency, categoryId, description, date },
-			{ timeZone, today }
+			{ timeZone, today, originalDate }
 		);
 		if (result.errors) {
 			errors = result.errors;
@@ -158,7 +166,10 @@
 		<SelectField
 			id="currency"
 			label="Moneda"
-			options={currencyOptions(defaultCurrency).map((c) => ({ value: c.value, label: c.value }))}
+			options={currencyOptions(initial?.currency ?? defaultCurrency).map((c) => ({
+				value: c.value,
+				label: c.value
+			}))}
 			bind:value={currency}
 			error={errors.currency}
 		/>
@@ -222,7 +233,13 @@
 	<div class="flex justify-end gap-2 border-t border-zinc-800 pt-5">
 		<Button variant="secondary" onclick={oncancel}>Cancelar</Button>
 		<Button type="submit" loading={isSubmitting}>
-			{isSubmitting ? 'Guardando…' : type === 'income' ? 'Registrar ingreso' : 'Registrar gasto'}
+			{isSubmitting
+				? 'Guardando…'
+				: transaction
+					? 'Guardar cambios'
+					: type === 'income'
+						? 'Registrar ingreso'
+						: 'Registrar gasto'}
 		</Button>
 	</div>
 </form>

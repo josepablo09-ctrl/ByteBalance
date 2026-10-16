@@ -136,3 +136,49 @@ describe('TransactionForm', () => {
 		await expect.element(page.getByRole('alert')).toHaveTextContent(/no aplica a una transacción/);
 	});
 });
+
+describe('TransactionForm al editar', () => {
+	/** @type {import('#lib/api/finance.js').Transaction} */
+	const EXISTING = {
+		id: 't1',
+		type: 'expense',
+		amount_cents: 125050,
+		currency: 'CRC',
+		category_id: 'c-food',
+		description: 'Compra semanal',
+		// 12:00 del 1 de octubre en Costa Rica.
+		occurred_at: '2026-10-01T18:00:00Z',
+		created_at: ''
+	};
+
+	it('precarga los valores de la transacción', async () => {
+		renderForm({ transaction: EXISTING });
+		await expect.element(page.getByLabelText('Monto')).toHaveValue('1250.50');
+		await expect.element(page.getByLabelText('Categoría')).toHaveValue('c-food');
+		await expect.element(page.getByLabelText('Descripción')).toHaveValue('Compra semanal');
+		await expect.element(page.getByLabelText('Fecha')).toHaveValue('2026-10-01');
+		await expect.element(page.getByRole('button', { name: 'Guardar cambios' })).toBeVisible();
+	});
+
+	it('guarda los cambios sin tocar la fecha si no cambió', async () => {
+		const { onSubmit } = renderForm({ transaction: EXISTING });
+		await amountInput().fill('1300');
+		await page.getByRole('button', { name: 'Guardar cambios' }).click();
+		expect(onSubmit).toHaveBeenCalledWith({
+			type: 'expense',
+			amount_cents: 130000,
+			currency: 'CRC',
+			category_id: 'c-food',
+			description: 'Compra semanal'
+		});
+	});
+
+	it('cambiar a ingreso quita la categoría de gastos', async () => {
+		const { onSubmit } = renderForm({ transaction: EXISTING });
+		await page.getByRole('button', { name: 'Ingreso' }).click();
+		await page.getByRole('button', { name: 'Guardar cambios' }).click();
+		expect(onSubmit).toHaveBeenCalledWith(
+			expect.objectContaining({ type: 'income', category_id: null })
+		);
+	});
+});

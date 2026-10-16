@@ -91,6 +91,25 @@ export function createFinanceApi(client) {
 		recordTransaction: (input) => client.post('/transactions', input),
 
 		/**
+		 * Corrige una transacción; solo cambian los campos enviados y
+		 * `category_id: null` quita la categoría.
+		 *
+		 * @param {string} id
+		 * @param {Partial<RecordTransactionInput>} changes
+		 * @returns {Promise<Transaction>}
+		 */
+		updateTransaction: (id, changes) =>
+			client.patch(`/transactions/${encodeURIComponent(id)}`, changes),
+
+		/**
+		 * @param {string} id
+		 * @returns {Promise<void>}
+		 */
+		async deleteTransaction(id) {
+			await client.delete(`/transactions/${encodeURIComponent(id)}`);
+		},
+
+		/**
 		 * Ingresos, gastos y neto por moneda en [from, to). Sin fechas, de toda la historia.
 		 *
 		 * @param {{ from?: Date, to?: Date }} [range]

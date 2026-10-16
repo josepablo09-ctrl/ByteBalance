@@ -66,3 +66,23 @@ describe('createFinanceApi', () => {
 		});
 	});
 });
+
+describe('edición y borrado de transacciones', () => {
+	it('corrige con PATCH y elimina con DELETE', async () => {
+		const client = {
+			request: vi.fn(),
+			get: vi.fn(),
+			post: vi.fn(),
+			patch: vi.fn(async () => ({ id: 't1' })),
+			delete: vi.fn(async () => null)
+		};
+		const api = createFinanceApi(client);
+		await api.updateTransaction('t1', { amount_cents: 500, category_id: null });
+		await api.deleteTransaction('t1');
+		expect(client.patch).toHaveBeenCalledWith('/transactions/t1', {
+			amount_cents: 500,
+			category_id: null
+		});
+		expect(client.delete).toHaveBeenCalledWith('/transactions/t1');
+	});
+});

@@ -55,3 +55,27 @@ describe('validateCategoryName', () => {
 		expect(validateCategoryName(name)).toBe(want);
 	});
 });
+
+describe('buildTransactionInput al editar', () => {
+	const editing = { ...context, originalDate: '2026-10-05', now: new Date('2026-10-15T20:15:00Z') };
+
+	it('no envía la fecha si no cambió, para conservar la hora original', () => {
+		const { input } = buildTransactionInput({ ...draft, date: '2026-10-05' }, editing);
+		expect(input).not.toHaveProperty('occurred_at');
+	});
+
+	it('mover a hoy usa la hora actual, no las 12:00 (que podría estar en el futuro)', () => {
+		const { input } = buildTransactionInput({ ...draft, date: '2026-10-15' }, editing);
+		expect(input?.occurred_at).toBe('2026-10-15T20:15:00.000Z');
+	});
+
+	it('mover a otro día lo fecha a las 12:00 del usuario', () => {
+		const { input } = buildTransactionInput({ ...draft, date: '2026-10-01' }, editing);
+		expect(input?.occurred_at).toBe('2026-10-01T18:00:00.000Z');
+	});
+
+	it('sin categoría envía null para quitarla', () => {
+		const { input } = buildTransactionInput({ ...draft, date: '2026-10-05' }, editing);
+		expect(input?.category_id).toBeNull();
+	});
+});

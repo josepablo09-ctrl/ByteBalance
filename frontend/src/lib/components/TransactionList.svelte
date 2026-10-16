@@ -10,10 +10,15 @@
 	 * @property {import('#lib/api/finance.js').Transaction[]} transactions
 	 * @property {Map<string, import('#lib/api/finance.js').Category>} categoriesById
 	 * @property {string} timeZone
+	 * @property {(transaction: import('#lib/api/finance.js').Transaction) => void} onedit
+	 * @property {(transaction: import('#lib/api/finance.js').Transaction) => void} ondelete
 	 */
 
 	/** @type {Props} */
-	let { transactions, categoriesById, timeZone } = $props();
+	let { transactions, categoriesById, timeZone, onedit, ondelete } = $props();
+
+	const ACTION_CLASS =
+		'grid size-8 place-items-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-800/70 focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:outline-none';
 </script>
 
 <ul class="divide-y divide-zinc-800/70">
@@ -22,7 +27,8 @@
 		{@const category = transaction.category_id
 			? categoriesById.get(transaction.category_id)
 			: undefined}
-		<li class="flex items-center gap-3 px-4 py-3 sm:px-5">
+		{@const title = transaction.description || category?.name || (isIncome ? 'Ingreso' : 'Gasto')}
+		<li class="flex items-center gap-3 py-3 pr-2 pl-4 sm:pl-5">
 			<span
 				class={[
 					'grid size-8 shrink-0 place-items-center rounded-md border border-zinc-800 bg-zinc-900',
@@ -33,9 +39,7 @@
 				<Icon name={isIncome ? 'income' : 'expense'} />
 			</span>
 			<div class="min-w-0 flex-1">
-				<p class="truncate text-sm text-zinc-200">
-					{transaction.description || category?.name || (isIncome ? 'Ingreso' : 'Gasto')}
-				</p>
+				<p class="truncate text-sm text-zinc-200">{title}</p>
 				<p class="truncate text-xs text-zinc-500">
 					{category?.name ?? 'Sin categoría'} · {formatShortDate(transaction.occurred_at, timeZone)}
 				</p>
@@ -55,6 +59,24 @@
 					}
 				)}
 			</p>
+			<div class="flex shrink-0">
+				<button
+					type="button"
+					class={[ACTION_CLASS, 'hover:text-zinc-100']}
+					aria-label="Editar {title}"
+					onclick={() => onedit(transaction)}
+				>
+					<Icon name="edit" />
+				</button>
+				<button
+					type="button"
+					class={[ACTION_CLASS, 'hover:text-red-300']}
+					aria-label="Eliminar {title}"
+					onclick={() => ondelete(transaction)}
+				>
+					<Icon name="trash" />
+				</button>
+			</div>
 		</li>
 	{/each}
 </ul>

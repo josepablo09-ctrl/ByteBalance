@@ -30,10 +30,12 @@
 	 * @property {import('#lib/api/finance.js').Category[]} categories
 	 * @property {string} timeZone
 	 * @property {() => void} onadd Abre el formulario de nueva transacción.
+	 * @property {(transaction: import('#lib/api/finance.js').Transaction) => void} onedit
+	 * @property {(transaction: import('#lib/api/finance.js').Transaction) => void} ondelete
 	 */
 
 	/** @type {Props} */
-	let { categories, timeZone, onadd } = $props();
+	let { categories, timeZone, onadd, onedit, ondelete } = $props();
 
 	const DEFAULT_TYPE = 'all';
 	const DEFAULT_PERIOD = 'month';
@@ -179,7 +181,7 @@
 			{/if}
 		</div>
 	{:else}
-		<TransactionList {transactions} {categoriesById} {timeZone} />
+		<TransactionList {transactions} {categoriesById} {timeZone} {onedit} {ondelete} />
 		{#if loadError}
 			<div class="border-t border-zinc-800 px-5 py-3"><Alert message={loadError} /></div>
 		{/if}

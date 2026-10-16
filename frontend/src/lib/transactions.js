@@ -21,16 +21,20 @@ const DEFAULT_HOUR = 12;
 /**
  * Valida el formulario y construye la petición para la API.
  *
- * Una transacción de hoy se envía sin `occurred_at` para que el backend use la
- * hora actual; una de otro día se fecha a las 12:00 en la zona del usuario, lo
- * que la mantiene en ese día aunque se consulte desde otra zona horaria.
+ * Al crear, una transacción de hoy se envía sin `occurred_at` para que el
+ * backend use la hora actual; una de otro día se fecha a las 12:00 en la zona
+ * del usuario, lo que la mantiene en ese día aunque se consulte desde otra zona.
+ *
+ * Al editar (`originalDate`), la fecha solo se envía si cambió, para conservar
+ * la hora original; si se mueve a hoy se usa la hora actual (`now`) en lugar de
+ * las 12:00, que podría quedar en el futuro.
  *
  * @param {TransactionDraft} draft
- * @param {{ timeZone: string, today: string }} context
+ * @param {{ timeZone: string, today: string, originalDate?: string, now?: Date }} context
  * @returns {{ input: import('./api/finance.js').RecordTransactionInput, errors?: undefined }
  *   | { input?: undefined, errors: Partial<Record<keyof TransactionDraft, string>> }}
  */
-export function buildTransactionInput(draft, { timeZone, today }) {
+export function buildTransactionInput(draft, { timeZone, today, originalDate, now = new Date() }) {
 	/** @type {Partial<Record<keyof TransactionDraft, string>>} */
 	const errors = {};
 
@@ -54,6 +58,13 @@ export function buildTransactionInput(draft, { timeZone, today }) {
 		category_id: draft.categoryId || null,
 		description
 	};
+	if (originalDate !== undefined) {
+		if (draft.date === originalDate) return { input };
+		if (draft.date === today) {
+			input.occurred_at = now.toISOString();
+			return { input };
+		}
+	}
 	if (draft.date !== today) {
 		const [, year, month, day] = date.map(Number);
 		input.occurred_at = zonedToInstant(
