@@ -199,3 +199,135 @@ func TestBalance(t *testing.T) {
 		t.Errorf("to inválido: status = %d, se esperaba 400", rec.Code)
 	}
 }
+
+func TestUpdateTransaction(t *testing.T) {
+	txID := domain.NewID()
+	categoryID := domain.NewID()
+	path := "/api/v1/transactions/" + txID.String()
+	echo := func(check func(usecase.UpdateTransactionInput)) func(domain.ID, domain.ID, usecase.UpdateTransactionInput) (*finance.Transaction, error) {
+		return func(userID, gotID domain.ID, in usecase.UpdateTransactionInput) (*finance.Transaction, error) {
+			if userID != testUserID || gotID != txID {
+				t.Errorf("UpdateTransaction(%v, %v)", userID, gotID)
+			}
+			check(in)
+			tx := &finance.Transaction{ID: txID, Type: finance.Expense, Amount: finance.Money{Cents: 100, Currency: "CRC"}, CategoryID: in.CategoryID}
+			if in.AmountCents != nil {
+				tx.Amount.Cents = *in.AmountCents
+			}
+			return tx, nil
+		}
+	}
+
+	tests := []struct {
+		name       string
+		target     string
+		body       string
+		updateFn   func(domain.ID, domain.ID, usecase.UpdateTransactionInput) (*finance.Transaction, error)
+		wantStatus int
+		wantBody   map[string]any
+	}{
+		{
+			name:   "corrige el monto",
+			target: path,
+			body:   `{"amount_cents":4550}`,
+			updateFn: echo(func(in usecase.UpdateTransactionInput) {
+				if in.AmountCents == nil || *in.AmountCents != 4550 || in.SetCategory || in.Type != nil {
+					t.Errorf("UpdateTransactionInput = %+v", in)
+				}
+			}),
+			wantStatus: http.StatusOK,
+			wantBody:   map[string]any{"amount_cents": float64(4550)},
+		},
+		{
+			name:   "cambia tipo, categoría y fecha",
+			target: path,
+			body:   `{"type":"income","category_id":"` + categoryID.String() + `","occurred_at":"2026-10-01T18:00:00Z"}`,
+			updateFn: echo(func(in usecase.UpdateTransactionInput) {
+				if in.Type == nil || *in.Type != finance.Income || !in.SetCategory || in.CategoryID == nil || *in.CategoryID != categoryID {
+					t.Errorf("UpdateTransactionInput = %+v", in)
+				}
+				if in.OccurredAt == nil || !in.OccurredAt.Equal(time.Date(2026, 10, 1, 18, 0, 0, 0, time.UTC)) {
+					t.Errorf("OccurredAt = %v", in.OccurredAt)
+				}
+			}),
+			wantStatus: http.StatusOK,
+			wantBody:   map[string]any{"category_id": categoryID.String()},
+		},
+		{
+			name:   "null quita la categoría",
+			target: path,
+			body:   `{"category_id":null}`,
+			updateFn: echo(func(in usecase.UpdateTransactionInput) {
+				if !in.SetCategory || in.CategoryID != nil {
+					t.Errorf("UpdateTransactionInput = %+v", in)
+				}
+			}),
+			wantStatus: http.StatusOK,
+			wantBody:   map[string]any{"category_id": nil},
+		},
+		{name: "sin campos", target: path, body: `{}`, wantStatus: http.StatusBadRequest},
+		{name: "categoría no UUID", target: path, body: `{"category_id":"comida"}`, wantStatus: http.StatusBadRequest},
+		{name: "fecha inválida", target: path, body: `{"occurred_at":"ayer"}`, wantStatus: http.StatusBadRequest},
+		{name: "id inválido", target: "/api/v1/transactions/no-uuid", body: `{"amount_cents":1}`, wantStatus: http.StatusBadRequest},
+		{
+			name:   "valor inválido para el dominio",
+			target: path,
+			body:   `{"amount_cents":0}`,
+			updateFn: func(domain.ID, domain.ID, usecase.UpdateTransactionInput) (*finance.Transaction, error) {
+				return nil, fmt.Errorf("actualizar transacción: %w: el monto debe ser mayor que cero", domain.ErrInvalidInput)
+			},
+			wantStatus: http.StatusUnprocessableEntity,
+		},
+		{
+			name:   "transacción de otro usuario",
+			target: path,
+			body:   `{"amount_cents":1}`,
+			updateFn: func(domain.ID, domain.ID, usecase.UpdateTransactionInput) (*finance.Transaction, error) {
+				return nil, fmt.Errorf("actualizar transacción: %w", domain.ErrNotFound)
+			},
+			wantStatus: http.StatusNotFound,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestRouter(Services{Finance: stubFinance{updateTransaction: tt.updateFn}})
+			rec := do(h, http.MethodPatch, tt.target, tt.body, true)
+			expectStatus(t, rec, tt.wantStatus)
+			if tt.wantBody == nil {
+				return
+			}
+			body := decodeJSONBody(t, rec)
+			for k, v := range tt.wantBody {
+				if body[k] != v {
+					t.Errorf("%s = %v, se esperaba %v", k, body[k], v)
+				}
+			}
+		})
+	}
+}
+
+func TestDeleteTransaction(t *testing.T) {
+	txID := domain.NewID()
+	tests := []struct {
+		name       string
+		target     string
+		deleteErr  error
+		wantStatus int
+	}{
+		{name: "elimina", target: "/api/v1/transactions/" + txID.String(), wantStatus: http.StatusNoContent},
+		{name: "inexistente", target: "/api/v1/transactions/" + txID.String(), deleteErr: fmt.Errorf("eliminar transacción: %w", domain.ErrNotFound), wantStatus: http.StatusNotFound},
+		{name: "id inválido", target: "/api/v1/transactions/no-uuid", wantStatus: http.StatusBadRequest},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestRouter(Services{Finance: stubFinance{deleteTransaction: func(userID, gotID domain.ID) error {
+				if userID != testUserID || gotID != txID {
+					t.Errorf("DeleteTransaction(%v, %v)", userID, gotID)
+				}
+				return tt.deleteErr
+			}}})
+			rec := do(h, http.MethodDelete, tt.target, "", true)
+			expectStatus(t, rec, tt.wantStatus)
+		})
+	}
+}

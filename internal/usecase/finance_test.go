@@ -118,12 +118,24 @@ func (f *fakeTransactionRepo) List(_ context.Context, userID domain.ID, filter f
 	return result, nil
 }
 
-func (f *fakeTransactionRepo) Update(context.Context, *finance.Transaction) error {
-	return errors.New("no usado en estos tests")
+func (f *fakeTransactionRepo) Update(_ context.Context, t *finance.Transaction) error {
+	for i, stored := range f.stored {
+		if stored.ID == t.ID && stored.UserID == t.UserID {
+			f.stored[i] = *t
+			return nil
+		}
+	}
+	return domain.ErrNotFound
 }
 
-func (f *fakeTransactionRepo) Delete(context.Context, domain.ID, domain.ID) error {
-	return errors.New("no usado en estos tests")
+func (f *fakeTransactionRepo) Delete(_ context.Context, userID, id domain.ID) error {
+	for i, stored := range f.stored {
+		if stored.ID == id && stored.UserID == userID {
+			f.stored = slices.Delete(f.stored, i, i+1)
+			return nil
+		}
+	}
+	return domain.ErrNotFound
 }
 
 var fixedNow = time.Date(2026, 10, 11, 18, 30, 0, 0, time.UTC)
@@ -375,6 +387,152 @@ func TestFinanceServiceBalance(t *testing.T) {
 			}
 			if transactions.lastFilter.Limit != 0 {
 				t.Errorf("Balance no debe paginar: Limit = %d", transactions.lastFilter.Limit)
+			}
+		})
+	}
+}
+
+func TestFinanceServiceUpdateTransaction(t *testing.T) {
+	owner := existingUser(t, "ana@example.com", "UTC")
+	stranger := existingUser(t, "otro@example.com", "UTC")
+	food := finance.Category{ID: domain.NewID(), UserID: owner.ID, Name: "Comida", Type: finance.Expense}
+	salary := finance.Category{ID: domain.NewID(), UserID: owner.ID, Name: "Salario", Type: finance.Income}
+	original := finance.Transaction{
+		ID: domain.NewID(), UserID: owner.ID, CategoryID: &food.ID, Type: finance.Expense,
+		Amount: finance.Money{Cents: 2500, Currency: "CRC"}, Description: "Almuerzo", OccurredAt: fixedNow,
+	}
+	cents := func(n int64) *int64 { return &n }
+	str := func(s string) *string { return &s }
+	entry := func(e finance.EntryType) *finance.EntryType { return &e }
+	yesterday := fixedNow.Add(-24 * time.Hour)
+
+	tests := []struct {
+		name    string
+		userID  domain.ID
+		in      UpdateTransactionInput
+		wantErr error
+		check   func(t *testing.T, tx finance.Transaction)
+	}{
+		{
+			name:   "corrige monto, descripción y fecha",
+			userID: owner.ID,
+			in:     UpdateTransactionInput{AmountCents: cents(3000), Description: str(" Almuerzo y café "), OccurredAt: &yesterday},
+			check: func(t *testing.T, tx finance.Transaction) {
+				if tx.Amount.Cents != 3000 || tx.Description != "Almuerzo y café" || !tx.OccurredAt.Equal(yesterday) {
+					t.Errorf("transacción = %+v", tx)
+				}
+				if tx.CategoryID == nil || *tx.CategoryID != food.ID || tx.Amount.Currency != "CRC" {
+					t.Errorf("los campos no enviados no debían cambiar: %+v", tx)
+				}
+			},
+		},
+		{
+			name:   "cambia a ingreso con una categoría de ingresos",
+			userID: owner.ID,
+			in:     UpdateTransactionInput{Type: entry(finance.Income), SetCategory: true, CategoryID: &salary.ID},
+			check: func(t *testing.T, tx finance.Transaction) {
+				if tx.Type != finance.Income || tx.CategoryID == nil || *tx.CategoryID != salary.ID {
+					t.Errorf("transacción = %+v", tx)
+				}
+			},
+		},
+		{
+			name:   "quita la categoría",
+			userID: owner.ID,
+			in:     UpdateTransactionInput{SetCategory: true},
+			check: func(t *testing.T, tx finance.Transaction) {
+				if tx.CategoryID != nil {
+					t.Errorf("CategoryID = %v, se esperaba nil", *tx.CategoryID)
+				}
+			},
+		},
+		{
+			name:   "cambia la moneda",
+			userID: owner.ID,
+			in:     UpdateTransactionInput{Currency: str("usd")},
+			check: func(t *testing.T, tx finance.Transaction) {
+				if tx.Amount.Currency != "USD" {
+					t.Errorf("Currency = %s", tx.Amount.Currency)
+				}
+			},
+		},
+		{name: "cambiar el tipo sin cambiar una categoría incompatible", userID: owner.ID, in: UpdateTransactionInput{Type: entry(finance.Income)}, wantErr: domain.ErrInvalidInput},
+		{name: "monto cero", userID: owner.ID, in: UpdateTransactionInput{AmountCents: cents(0)}, wantErr: domain.ErrInvalidInput},
+		{name: "moneda inválida", userID: owner.ID, in: UpdateTransactionInput{Currency: str("XX")}, wantErr: domain.ErrInvalidInput},
+		{name: "categoría inexistente", userID: owner.ID, in: UpdateTransactionInput{SetCategory: true, CategoryID: new(domain.NewID())}, wantErr: domain.ErrNotFound},
+		{name: "transacción de otro usuario", userID: stranger.ID, in: UpdateTransactionInput{AmountCents: cents(1)}, wantErr: domain.ErrNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transactions := &fakeTransactionRepo{stored: []finance.Transaction{original}}
+			svc := NewFinanceService(newFakeCategoryRepo(food, salary), transactions, newFakeUserRepo(owner, stranger), fixedClock)
+
+			_, err := svc.UpdateTransaction(context.Background(), tt.userID, original.ID, tt.in)
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("UpdateTransaction() error = %v, se esperaba %v", err, tt.wantErr)
+				}
+				if stored := transactions.stored[0]; stored.Amount != original.Amount || stored.Type != original.Type {
+					t.Errorf("un cambio inválido no debe persistirse: %+v", stored)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("UpdateTransaction() error inesperado: %v", err)
+			}
+			tt.check(t, transactions.stored[0])
+		})
+	}
+}
+
+func TestFinanceServiceUpdateTransactionKeepsDeletedCategory(t *testing.T) {
+	// Si la categoría se borró después, corregir el monto no debe fallar por ella.
+	owner := existingUser(t, "ana@example.com", "UTC")
+	deletedCategory := domain.NewID()
+	tx := finance.Transaction{
+		ID: domain.NewID(), UserID: owner.ID, CategoryID: &deletedCategory, Type: finance.Expense,
+		Amount: finance.Money{Cents: 100, Currency: "CRC"}, OccurredAt: fixedNow,
+	}
+	transactions := &fakeTransactionRepo{stored: []finance.Transaction{tx}}
+	svc := NewFinanceService(newFakeCategoryRepo(), transactions, newFakeUserRepo(owner), fixedClock)
+
+	amount := int64(250)
+	if _, err := svc.UpdateTransaction(context.Background(), owner.ID, tx.ID, UpdateTransactionInput{AmountCents: &amount}); err != nil {
+		t.Fatalf("UpdateTransaction() error inesperado: %v", err)
+	}
+	if got := transactions.stored[0]; got.Amount.Cents != 250 || got.CategoryID == nil {
+		t.Errorf("transacción = %+v", got)
+	}
+}
+
+func TestFinanceServiceDeleteTransaction(t *testing.T) {
+	owner := existingUser(t, "ana@example.com", "UTC")
+	stranger := existingUser(t, "otro@example.com", "UTC")
+	tx := finance.Transaction{ID: domain.NewID(), UserID: owner.ID, Type: finance.Expense, Amount: finance.Money{Cents: 100, Currency: "CRC"}, OccurredAt: fixedNow}
+
+	tests := []struct {
+		name    string
+		userID  domain.ID
+		wantErr error
+	}{
+		{name: "elimina la propia", userID: owner.ID},
+		{name: "transacción de otro usuario", userID: stranger.ID, wantErr: domain.ErrNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transactions := &fakeTransactionRepo{stored: []finance.Transaction{tx}}
+			svc := NewFinanceService(newFakeCategoryRepo(), transactions, newFakeUserRepo(owner, stranger), fixedClock)
+
+			err := svc.DeleteTransaction(context.Background(), tt.userID, tx.ID)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("DeleteTransaction() error = %v, se esperaba %v", err, tt.wantErr)
+			}
+			wantRemaining := 1
+			if tt.wantErr == nil {
+				wantRemaining = 0
+			}
+			if remaining := len(transactions.stored); remaining != wantRemaining {
+				t.Errorf("quedan %d transacciones, se esperaban %d", remaining, wantRemaining)
 			}
 		})
 	}

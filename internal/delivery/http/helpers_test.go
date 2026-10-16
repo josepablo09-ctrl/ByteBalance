@@ -80,6 +80,8 @@ type stubFinance struct {
 	listCategories    func(domain.ID) ([]finance.Category, error)
 	recordTransaction func(domain.ID, usecase.RecordTransactionInput) (*finance.Transaction, error)
 	listTransactions  func(domain.ID, finance.TransactionFilter) ([]finance.Transaction, error)
+	updateTransaction func(domain.ID, domain.ID, usecase.UpdateTransactionInput) (*finance.Transaction, error)
+	deleteTransaction func(domain.ID, domain.ID) error
 	balance           func(domain.ID, time.Time, time.Time) ([]finance.Balance, error)
 }
 
@@ -249,4 +251,18 @@ func (s stubHabits) DeleteLog(_ context.Context, userID, habitID domain.ID, date
 		return errNotStubbed
 	}
 	return s.deleteLog(userID, habitID, date)
+}
+
+func (s stubFinance) UpdateTransaction(_ context.Context, userID, id domain.ID, in usecase.UpdateTransactionInput) (*finance.Transaction, error) {
+	if s.updateTransaction == nil {
+		return nil, errNotStubbed
+	}
+	return s.updateTransaction(userID, id, in)
+}
+
+func (s stubFinance) DeleteTransaction(_ context.Context, userID, id domain.ID) error {
+	if s.deleteTransaction == nil {
+		return errNotStubbed
+	}
+	return s.deleteTransaction(userID, id)
 }

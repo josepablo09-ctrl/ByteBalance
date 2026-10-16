@@ -31,6 +31,8 @@ type FinanceService interface {
 	ListCategories(ctx context.Context, userID domain.ID) ([]finance.Category, error)
 	RecordTransaction(ctx context.Context, userID domain.ID, in usecase.RecordTransactionInput) (*finance.Transaction, error)
 	ListTransactions(ctx context.Context, userID domain.ID, f finance.TransactionFilter) ([]finance.Transaction, error)
+	UpdateTransaction(ctx context.Context, userID, transactionID domain.ID, in usecase.UpdateTransactionInput) (*finance.Transaction, error)
+	DeleteTransaction(ctx context.Context, userID, transactionID domain.ID) error
 	Balance(ctx context.Context, userID domain.ID, from, to time.Time) ([]finance.Balance, error)
 }
 
@@ -91,6 +93,8 @@ func NewRouter(s Services, opts Options) http.Handler {
 	mux.Handle("POST /api/v1/categories", protected(a.createCategory))
 	mux.Handle("GET /api/v1/transactions", protected(a.listTransactions))
 	mux.Handle("POST /api/v1/transactions", protected(a.recordTransaction))
+	mux.Handle("PATCH /api/v1/transactions/{id}", protected(a.updateTransaction))
+	mux.Handle("DELETE /api/v1/transactions/{id}", protected(a.deleteTransaction))
 	mux.Handle("GET /api/v1/balance", protected(a.balance))
 
 	mux.Handle("GET /api/v1/habits", protected(a.listHabits))

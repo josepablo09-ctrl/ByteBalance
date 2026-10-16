@@ -1,6 +1,7 @@
 package http
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -206,4 +207,78 @@ func (a *api) balance(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"balances": resp})
+}
+
+// updateTransactionRequest usa punteros para distinguir "no enviado" de "vacío".
+// CategoryID se lee en crudo para distinguir además "no enviado" (no cambia) de
+// null (quita la categoría).
+type updateTransactionRequest struct {
+	Type        *string         `json:"type"`
+	AmountCents *int64          `json:"amount_cents"`
+	Currency    *string         `json:"currency"`
+	CategoryID  json.RawMessage `json:"category_id"`
+	Description *string         `json:"description"`
+	OccurredAt  *time.Time      `json:"occurred_at"`
+}
+
+// updateTransaction atiende PATCH /api/v1/transactions/{id}. Solo modifica los
+// campos enviados.
+func (a *api) updateTransaction(w http.ResponseWriter, r *http.Request) {
+	transactionID, err := pathID(r, "id")
+	if err != nil {
+		respondError(w, r, err)
+		return
+	}
+	var req updateTransactionRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		respondError(w, r, err)
+		return
+	}
+
+	in := usecase.UpdateTransactionInput{
+		AmountCents: req.AmountCents,
+		Currency:    req.Currency,
+		Description: req.Description,
+		OccurredAt:  req.OccurredAt,
+	}
+	if req.Type != nil {
+		t := finance.EntryType(*req.Type)
+		in.Type = &t
+	}
+	if len(req.CategoryID) > 0 {
+		in.SetCategory = true
+		if string(req.CategoryID) != "null" {
+			var id domain.ID
+			if err := json.Unmarshal(req.CategoryID, &id); err != nil {
+				respondError(w, r, badRequest("category_id debe ser un UUID o null"))
+				return
+			}
+			in.CategoryID = &id
+		}
+	}
+	if in == (usecase.UpdateTransactionInput{}) {
+		respondError(w, r, badRequest("indica al menos uno de: type, amount_cents, currency, category_id, description, occurred_at"))
+		return
+	}
+
+	t, err := a.Finance.UpdateTransaction(r.Context(), userIDFrom(r), transactionID, in)
+	if err != nil {
+		respondError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, newTransactionResponse(*t))
+}
+
+// deleteTransaction atiende DELETE /api/v1/transactions/{id}. Responde 204 sin cuerpo.
+func (a *api) deleteTransaction(w http.ResponseWriter, r *http.Request) {
+	transactionID, err := pathID(r, "id")
+	if err != nil {
+		respondError(w, r, err)
+		return
+	}
+	if err := a.Finance.DeleteTransaction(r.Context(), userIDFrom(r), transactionID); err != nil {
+		respondError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

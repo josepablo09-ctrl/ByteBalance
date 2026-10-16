@@ -120,6 +120,83 @@ func (s *FinanceService) resolveCurrency(ctx context.Context, userID domain.ID, 
 	return u.DefaultCurrency, nil
 }
 
+// UpdateTransactionInput son los cambios a una transacción. Un campo nil se deja igual.
+type UpdateTransactionInput struct {
+	Type        *finance.EntryType
+	AmountCents *int64
+	Currency    *string
+	// SetCategory indica si se modifica la categoría; entonces CategoryID nil la quita.
+	SetCategory bool
+	CategoryID  *domain.ID
+	Description *string
+	OccurredAt  *time.Time
+}
+
+// UpdateTransaction corrige una transacción del usuario. Si algún valor es
+// inválido no se guarda ningún cambio. La categoría se vuelve a comprobar solo
+// si cambia ella o el tipo, porque debe ser del mismo tipo que la transacción.
+func (s *FinanceService) UpdateTransaction(ctx context.Context, userID, transactionID domain.ID, in UpdateTransactionInput) (*finance.Transaction, error) {
+	t, err := s.transactions.GetByID(ctx, userID, transactionID)
+	if err != nil {
+		return nil, fmt.Errorf("actualizar transacción: %w", err)
+	}
+	typeChanged := in.Type != nil && *in.Type != t.Type
+	if in.Type != nil {
+		t.Type = *in.Type
+	}
+	if in.AmountCents != nil {
+		t.Amount.Cents = *in.AmountCents
+	}
+	if in.Currency != nil {
+		c, err := domain.ParseCurrency(*in.Currency)
+		if err != nil {
+			return nil, fmt.Errorf("actualizar transacción: %w", err)
+		}
+		t.Amount.Currency = c
+	}
+	if in.Description != nil {
+		t.Description = strings.TrimSpace(*in.Description)
+	}
+	if in.OccurredAt != nil {
+		t.OccurredAt = *in.OccurredAt
+	}
+	if err := t.Validate(); err != nil {
+		return nil, fmt.Errorf("actualizar transacción: %w", err)
+	}
+
+	if in.SetCategory || typeChanged {
+		categoryID := t.CategoryID
+		if in.SetCategory {
+			categoryID = in.CategoryID
+		}
+		t.ClearCategory()
+		if categoryID != nil {
+			// GetByID está acotado al usuario: una categoría ajena se reporta como inexistente.
+			c, err := s.categories.GetByID(ctx, userID, *categoryID)
+			if err != nil {
+				return nil, fmt.Errorf("actualizar transacción: categoría: %w", err)
+			}
+			if err := t.AssignCategory(c); err != nil {
+				return nil, fmt.Errorf("actualizar transacción: %w", err)
+			}
+		}
+	}
+
+	if err := s.transactions.Update(ctx, t); err != nil {
+		return nil, fmt.Errorf("actualizar transacción: %w", err)
+	}
+	return t, nil
+}
+
+// DeleteTransaction elimina (borrado lógico) una transacción del usuario; deja
+// de contar en el balance. Una transacción ajena se reporta como inexistente.
+func (s *FinanceService) DeleteTransaction(ctx context.Context, userID, transactionID domain.ID) error {
+	if err := s.transactions.Delete(ctx, userID, transactionID); err != nil {
+		return fmt.Errorf("eliminar transacción: %w", err)
+	}
+	return nil
+}
+
 // ListTransactions devuelve las transacciones del usuario que cumplen f. Sin
 // Limit se devuelven 50, y nunca más de 200.
 func (s *FinanceService) ListTransactions(ctx context.Context, userID domain.ID, f finance.TransactionFilter) ([]finance.Transaction, error) {
