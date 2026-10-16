@@ -40,16 +40,29 @@ src/
 │   ├── api/          # Cliente HTTP (único punto que habla con el backend)
 │   │   ├── client.js # fetch + Bearer token + ApiError
 │   │   ├── auth.js   # login, registro, perfil
+│   │   ├── finance.js# categorías, transacciones, balance
 │   │   ├── errors.js # ApiError → mensaje para el usuario
 │   │   └── index.js  # instancia de la app conectada a la sesión
-│   ├── components/   # UI reutilizable (Button, TextField, LoginForm…)
-│   ├── stores/       # Estado global (session)
+│   ├── components/   # UI reutilizable (Button, Modal, Sidebar, TransactionForm…)
+│   ├── stores/       # Estado global (session, profile)
 │   ├── config.js     # VITE_API_URL validada
+│   ├── dates.js      # Fechas y meses en la zona horaria del usuario
+│   ├── money.js      # Centavos ↔ texto, sin coma flotante
+│   ├── transactions.js # Formulario de transacción → petición a la API
 │   └── validation.js # Reglas espejo del backend
 └── routes/
     ├── (auth)/       # login, register — redirigen a / si hay sesión
-    └── (app)/        # pantallas privadas — redirigen a /login sin sesión
+    └── (app)/        # layout con sidebar + header; / es el dashboard de finanzas
 ```
+
+## Convenciones de datos
+
+- Los montos viajan y se guardan **en centavos enteros** (`amount_cents`). Se formatean
+  con `formatMoney` a partir de un decimal en texto, nunca dividiendo entre 100.
+- "Este mes", "hoy" y las fechas de la lista se calculan en la **zona horaria del perfil**
+  del usuario, no en la del navegador, para coincidir con el backend.
+- Los balances son por moneda: el dashboard muestra la moneda principal y lista aparte las
+  demás, sin sumarlas (no hay tipo de cambio).
 
 ## Notas de SvelteKit 3
 

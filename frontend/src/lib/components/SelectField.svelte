@@ -10,10 +10,20 @@
 	 * @property {string} [error]
 	 * @property {string} [hint]
 	 * @property {boolean} [disabled]
+	 * @property {(value: string) => void} [onchange]
 	 */
 
 	/** @type {Props} */
-	let { id, label, value = $bindable(''), options, error, hint, disabled = false } = $props();
+	let {
+		id,
+		label,
+		value = $bindable(''),
+		options,
+		error,
+		hint,
+		disabled = false,
+		onchange
+	} = $props();
 </script>
 
 <FormField {id} {label} {error} {hint}>
@@ -23,6 +33,7 @@
 			name={id}
 			{disabled}
 			bind:value
+			onchange={() => onchange?.(value)}
 			aria-invalid={error ? 'true' : undefined}
 			aria-describedby={error || hint ? messageId(id) : undefined}
 			class={[CONTROL_CLASS, borderClass(error), 'appearance-none pr-9']}
