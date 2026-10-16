@@ -398,3 +398,31 @@ func TestDeleteHabit(t *testing.T) {
 		})
 	}
 }
+
+func TestDeleteLog(t *testing.T) {
+	habitID := domain.NewID()
+	base := "/api/v1/habits/" + habitID.String() + "/logs/"
+	tests := []struct {
+		name       string
+		target     string
+		deleteErr  error
+		wantStatus int
+	}{
+		{name: "borra el día", target: base + "2026-10-16", wantStatus: http.StatusNoContent},
+		{name: "día sin registro", target: base + "2026-10-15", deleteErr: fmt.Errorf("borrar registro: %w", domain.ErrNotFound), wantStatus: http.StatusNotFound},
+		{name: "fecha inválida", target: base + "16-10-2026", wantStatus: http.StatusBadRequest},
+		{name: "id inválido", target: "/api/v1/habits/no-uuid/logs/2026-10-16", wantStatus: http.StatusBadRequest},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestRouter(Services{Habits: stubHabits{deleteLog: func(userID, gotHabit domain.ID, date time.Time) error {
+				if userID != testUserID || gotHabit != habitID || date.Format(time.DateOnly) != tt.target[len(base):] {
+					t.Errorf("DeleteLog(%v, %v, %v)", userID, gotHabit, date)
+				}
+				return tt.deleteErr
+			}}})
+			rec := do(h, http.MethodDelete, tt.target, "", true)
+			expectStatus(t, rec, tt.wantStatus)
+		})
+	}
+}

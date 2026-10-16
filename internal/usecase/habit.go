@@ -208,6 +208,21 @@ func (s *HabitService) ListLogs(ctx context.Context, userID, habitID domain.ID, 
 	return logs, nil
 }
 
+// DeleteLog borra el registro de un día de un hábito del usuario, dejando ese
+// día en cero (p. ej. para deshacer un "hecho" marcado por error). Se admite
+// aunque el hábito esté pausado, para poder corregir el historial. Devuelve
+// domain.ErrNotFound si el hábito es ajeno o ese día no tiene registro.
+func (s *HabitService) DeleteLog(ctx context.Context, userID, habitID domain.ID, date time.Time) error {
+	// Comprueba la propiedad: el repositorio de registros no la valida.
+	if _, err := s.habits.GetByID(ctx, userID, habitID); err != nil {
+		return fmt.Errorf("borrar registro: %w", err)
+	}
+	if err := s.logs.Delete(ctx, habitID, habit.DateOf(date)); err != nil {
+		return fmt.Errorf("borrar registro: %w", err)
+	}
+	return nil
+}
+
 // userToday devuelve la fecha actual en la zona horaria del usuario.
 func (s *HabitService) userToday(ctx context.Context, userID domain.ID) (time.Time, error) {
 	u, err := s.users.GetByID(ctx, userID)

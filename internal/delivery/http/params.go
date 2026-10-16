@@ -82,3 +82,12 @@ func pathID(r *http.Request, key string) (domain.ID, error) {
 	}
 	return id, nil
 }
+
+// pathDate lee un segmento de ruta con formato YYYY-MM-DD (p. ej. {date} en /habits/{id}/logs/{date}).
+func pathDate(r *http.Request, key string) (time.Time, error) {
+	d, err := time.Parse(time.DateOnly, r.PathValue(key))
+	if err != nil {
+		return time.Time{}, badRequest("el %s de la ruta debe tener formato YYYY-MM-DD", key)
+	}
+	return d, nil
+}

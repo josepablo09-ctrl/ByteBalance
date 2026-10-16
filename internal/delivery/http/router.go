@@ -41,6 +41,7 @@ type HabitService interface {
 	ListLogs(ctx context.Context, userID, habitID domain.ID, from, to time.Time) ([]habit.Log, error)
 	UpdateHabit(ctx context.Context, userID, habitID domain.ID, in usecase.UpdateHabitInput) (*habit.Habit, error)
 	DeleteHabit(ctx context.Context, userID, habitID domain.ID) error
+	DeleteLog(ctx context.Context, userID, habitID domain.ID, date time.Time) error
 	LogCompletion(ctx context.Context, userID, habitID domain.ID, in usecase.LogCompletionInput) (*habit.Log, error)
 }
 
@@ -98,6 +99,7 @@ func NewRouter(s Services, opts Options) http.Handler {
 	mux.Handle("DELETE /api/v1/habits/{id}", protected(a.deleteHabit))
 	mux.Handle("GET /api/v1/habits/{id}/logs", protected(a.listLogs))
 	mux.Handle("POST /api/v1/habits/{id}/logs", protected(a.logCompletion))
+	mux.Handle("DELETE /api/v1/habits/{id}/logs/{date}", protected(a.deleteLog))
 
 	return recoverPanics(cors(opts.AllowedOrigins, mux))
 }

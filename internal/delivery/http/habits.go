@@ -274,3 +274,23 @@ func (a *api) deleteHabit(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// deleteLog atiende DELETE /api/v1/habits/{id}/logs/{date}: deja ese día en
+// cero (p. ej. para deshacer un "hecho" marcado por error). Responde 204.
+func (a *api) deleteLog(w http.ResponseWriter, r *http.Request) {
+	habitID, err := pathID(r, "id")
+	if err != nil {
+		respondError(w, r, err)
+		return
+	}
+	date, err := pathDate(r, "date")
+	if err != nil {
+		respondError(w, r, err)
+		return
+	}
+	if err := a.Habits.DeleteLog(r.Context(), userIDFrom(r), habitID, date); err != nil {
+		respondError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

@@ -495,3 +495,49 @@ func TestHabitServiceDeleteHabit(t *testing.T) {
 		})
 	}
 }
+
+func TestHabitServiceDeleteLog(t *testing.T) {
+	owner := existingUser(t, "ana@example.com", "UTC")
+	stranger := existingUser(t, "otro@example.com", "UTC")
+	active := habit.Habit{ID: domain.NewID(), UserID: owner.ID, Name: "Leer", Frequency: habit.Daily, TargetCount: 1, IsActive: true}
+	paused := habit.Habit{ID: domain.NewID(), UserID: owner.ID, Name: "Correr", Frequency: habit.Daily, TargetCount: 1}
+	day := time.Date(2026, 10, 11, 0, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name    string
+		userID  domain.ID
+		habitID domain.ID
+		date    time.Time
+		wantErr error
+	}{
+		{name: "borra el registro del día", userID: owner.ID, habitID: active.ID, date: day},
+		// Solo cuenta la fecha: la hora no impide encontrar el registro.
+		{name: "ignora la hora", userID: owner.ID, habitID: active.ID, date: day.Add(15 * time.Hour)},
+		{name: "también en un hábito pausado", userID: owner.ID, habitID: paused.ID, date: day},
+		{name: "día sin registro", userID: owner.ID, habitID: active.ID, date: day.AddDate(0, 0, -1), wantErr: domain.ErrNotFound},
+		{name: "hábito de otro usuario", userID: stranger.ID, habitID: active.ID, date: day, wantErr: domain.ErrNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logs := newFakeLogRepo()
+			for _, h := range []habit.Habit{active, paused} {
+				if err := logs.Upsert(context.Background(), &habit.Log{HabitID: h.ID, LoggedOn: day, Count: 1}); err != nil {
+					t.Fatalf("sembrar registro: %v", err)
+				}
+			}
+			svc := NewHabitService(newFakeHabitRepo(active, paused), logs, newFakeUserRepo(owner, stranger), fixedClock)
+
+			err := svc.DeleteLog(context.Background(), tt.userID, tt.habitID, tt.date)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("DeleteLog() error = %v, se esperaba %v", err, tt.wantErr)
+			}
+			_, stillThere := logs.byKey[logKey(tt.habitID, day)]
+			if tt.wantErr == nil && stillThere {
+				t.Error("el registro debía borrarse")
+			}
+			if tt.wantErr != nil && tt.habitID == active.ID && !stillThere {
+				t.Error("un error no debe borrar el registro existente")
+			}
+		})
+	}
+}

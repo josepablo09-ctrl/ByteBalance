@@ -124,6 +124,7 @@ type stubHabits struct {
 	listLogs      func(domain.ID, domain.ID, time.Time, time.Time) ([]habit.Log, error)
 	updateHabit   func(domain.ID, domain.ID, usecase.UpdateHabitInput) (*habit.Habit, error)
 	deleteHabit   func(domain.ID, domain.ID) error
+	deleteLog     func(domain.ID, domain.ID, time.Time) error
 	logCompletion func(domain.ID, domain.ID, usecase.LogCompletionInput) (*habit.Log, error)
 }
 
@@ -241,4 +242,11 @@ func (s stubHabits) DeleteHabit(_ context.Context, userID, habitID domain.ID) er
 		return errNotStubbed
 	}
 	return s.deleteHabit(userID, habitID)
+}
+
+func (s stubHabits) DeleteLog(_ context.Context, userID, habitID domain.ID, date time.Time) error {
+	if s.deleteLog == nil {
+		return errNotStubbed
+	}
+	return s.deleteLog(userID, habitID, date)
 }
