@@ -21,6 +21,16 @@ npm run dev              # http://localhost:5173 (puerto fijo, coincide con CORS
 
 > Las variables `VITE_*` se incrustan en el bundle público. **Nunca** pongas secretos en `frontend/.env`.
 
+## Build de producción
+
+```bash
+VITE_API_URL=https://api.example.com/api/v1 npm run build   # SPA estática en build/
+```
+
+El build falla si `VITE_API_URL` falta o usa `http` (salvo hacia localhost) e incluye una
+Content-Security-Policy que solo permite conectar con esa API. Para subirlo a S3 +
+CloudFront, ver [`DEPLOYMENT.md`](../DEPLOYMENT.md).
+
 ## Scripts
 
 | Comando           | Descripción                                                       |

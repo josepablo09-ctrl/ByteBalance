@@ -185,6 +185,14 @@ go run ./scripts/cleanup-e2e        # Simula el borrado de usuarios de prueba e2
 go run ./scripts/cleanup-e2e -yes   # Los borra junto con todos sus datos
 ```
 
+### Docker y despliegue (ver `DEPLOYMENT.md`)
+
+```bash
+docker build -t bytebalance-api .                       # Imagen de producción de la API (distroless)
+docker build -t bytebalance-migrate --target migrate .  # Imagen de migraciones (lee DATABASE_URL del entorno)
+cd frontend && VITE_API_URL=https://api.example.com/api/v1 npm run build   # SPA estática para S3 (exige https)
+```
+
 ### Migraciones (golang-migrate)
 
 ```bash
