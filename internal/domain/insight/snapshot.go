@@ -45,6 +45,8 @@ type Snapshot struct {
 	To       time.Time
 	Finances []CurrencySummary
 	Habits   []HabitSummary
+	// SavingsGoal es la meta de ahorro mensual del usuario; nil si no fijó una.
+	SavingsGoal *finance.Money
 }
 
 // IsEmpty indica si no hay nada que analizar.
@@ -62,6 +64,8 @@ type CurrencySummary struct {
 	// de la misma duración, para comparar la tendencia.
 	PreviousIncomeCents  int64
 	PreviousExpenseCents int64
+	// SavingsCents es lo apartado al ahorro menos lo retirado en el periodo actual.
+	SavingsCents int64
 	// Transactions es el número de movimientos del periodo actual.
 	Transactions int
 	// TopExpenses son las categorías con más gasto en el periodo actual, de mayor a menor.
@@ -101,6 +105,10 @@ func SummarizeFinances(current, previous []finance.Transaction, categoryNames ma
 		case finance.Expense:
 			s.ExpenseCents += t.Amount.Cents
 			expensesByCategory[t.Amount.Currency][categoryName(t.CategoryID, categoryNames)] += t.Amount.Cents
+		case finance.Saving:
+			s.SavingsCents += t.Amount.Cents
+		case finance.Withdrawal:
+			s.SavingsCents -= t.Amount.Cents
 		}
 	}
 	for _, t := range previous {

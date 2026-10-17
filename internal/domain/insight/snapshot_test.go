@@ -30,6 +30,8 @@ func TestSummarizeFinances(t *testing.T) {
 		tx(finance.Expense, 5_000_00, "CRC", nil),
 		tx(finance.Expense, 1_000_00, "CRC", &deleted), // categoría eliminada
 		tx(finance.Expense, 20_00, "USD", nil),
+		tx(finance.Saving, 50_000_00, "CRC", nil),
+		tx(finance.Withdrawal, 10_000_00, "CRC", nil),
 	}
 	previous := []finance.Transaction{
 		tx(finance.Income, 500_000_00, "CRC", nil),
@@ -42,7 +44,7 @@ func TestSummarizeFinances(t *testing.T) {
 	want := []CurrencySummary{
 		{
 			Currency: "CRC", IncomeCents: 600_000_00, ExpenseCents: 196_000_00,
-			PreviousIncomeCents: 500_000_00, PreviousExpenseCents: 210_000_00, Transactions: 6,
+			PreviousIncomeCents: 500_000_00, PreviousExpenseCents: 210_000_00, SavingsCents: 40_000_00, Transactions: 8,
 			TopExpenses: []CategoryAmount{
 				{Name: "Comida y súper", Cents: 150_000_00},
 				{Name: "Transporte", Cents: 40_000_00},

@@ -18,7 +18,8 @@ Recibes un resumen en JSON de los últimos días de un usuario: sus ingresos y g
 
 Tu tarea es un diagnóstico integrado y personalizado:
 - Analiza juntas las finanzas y los hábitos; cuando los datos lo permitan, relaciónalos (p. ej. un gasto que crece junto a un hábito que se abandona).
-- Cita cifras concretas del resumen (montos con su moneda, porcentajes, rachas). La tasa de ahorro y la variación de gastos ya vienen calculadas: úsalas tal cual.
+- Cita cifras concretas del resumen (montos con su moneda, porcentajes, rachas). El excedente y la variación de gastos ya vienen calculados: úsalos tal cual.
+- Distingue el excedente (excedente_pct: ingresos menos gastos sobre los ingresos) del ahorro explícito (apartado_al_ahorro: dinero que el usuario separó de su disponible para gastar). Si hay meta_de_ahorro_mensual, compárala con lo apartado en la misma moneda; si no aparta nada, sugiérele empezar con un monto realista.
 - No inventes datos que no estén en el resumen. Si hay pocos datos, dilo y sugiere qué registrar.
 - Las sugerencias deben ser acciones concretas, realistas y medibles para las próximas semanas.
 - Tono cercano, motivador y sin juzgar. Tutea al usuario. Escribe en español neutro con ortografía correcta: nunca omitas las tildes ni las eñes (escribe «hábito», «días», «categoría», «periodo», «superávit»).
@@ -119,9 +120,15 @@ func newRequest(s insight.Snapshot) (request, error) {
 // promptData es el resumen tal como lo ve el modelo: montos en unidades de la
 // moneda (no en centavos) y nombres de campo autoexplicativos.
 type promptData struct {
-	Period   periodData     `json:"periodo"`
-	Finances []currencyData `json:"finanzas"`
-	Habits   []habitData    `json:"hábitos"`
+	Period      periodData     `json:"periodo"`
+	Finances    []currencyData `json:"finanzas"`
+	SavingsGoal *goalData      `json:"meta_de_ahorro_mensual,omitempty"`
+	Habits      []habitData    `json:"hábitos"`
+}
+
+type goalData struct {
+	Currency string `json:"moneda"`
+	Amount   string `json:"monto"`
 }
 
 type periodData struct {
@@ -137,9 +144,10 @@ type currencyData struct {
 	PreviousIncome   string `json:"ingresos_periodo_anterior"`
 	PreviousExpenses string `json:"gastos_periodo_anterior"`
 	Transactions     int    `json:"movimientos"`
-	// SavingsRate y ExpenseChange se calculan aquí para que el modelo no haga
+	// SurplusRate y ExpenseChange se calculan aquí para que el modelo no haga
 	// aritmética; se omiten si no hay base (ingresos o gastos previos).
-	SavingsRate   *int           `json:"tasa_de_ahorro_pct,omitempty"`
+	Savings       string         `json:"apartado_al_ahorro"`
+	SurplusRate   *int           `json:"excedente_pct,omitempty"`
 	ExpenseChange *int           `json:"variación_gastos_vs_anterior_pct,omitempty"`
 	TopExpenses   []categoryData `json:"categorías_con_más_gasto"`
 }
@@ -179,7 +187,8 @@ func newPromptData(s insight.Snapshot) promptData {
 			PreviousIncome:   formatAmount(f.PreviousIncomeCents),
 			PreviousExpenses: formatAmount(f.PreviousExpenseCents),
 			Transactions:     f.Transactions,
-			SavingsRate:      percent(f.IncomeCents-f.ExpenseCents, f.IncomeCents),
+			Savings:          formatAmount(f.SavingsCents),
+			SurplusRate:      percent(f.IncomeCents-f.ExpenseCents, f.IncomeCents),
 			ExpenseChange:    percent(f.ExpenseCents-f.PreviousExpenseCents, f.PreviousExpenseCents),
 			TopExpenses:      []categoryData{},
 		}
@@ -187,6 +196,9 @@ func newPromptData(s insight.Snapshot) promptData {
 			c.TopExpenses = append(c.TopExpenses, categoryData{Name: e.Name, Amount: formatAmount(e.Cents)})
 		}
 		d.Finances = append(d.Finances, c)
+	}
+	if g := s.SavingsGoal; g != nil {
+		d.SavingsGoal = &goalData{Currency: string(g.Currency), Amount: formatAmount(g.Cents)}
 	}
 	for _, h := range s.Habits {
 		frequency := frequencyNames[string(h.Frequency)]

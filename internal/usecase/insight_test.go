@@ -43,6 +43,8 @@ var insightNow = time.Date(2026, 10, 16, 3, 0, 0, 0, time.UTC)
 func newInsightFixture(t *testing.T) *insightFixture {
 	t.Helper()
 	u := existingUser(t, "ana@example.com", "America/Costa_Rica")
+	goal := int64(100_000_00)
+	u.MonthlySavingsGoalCents = &goal
 	f := &insightFixture{
 		userID:       u.ID,
 		categories:   newFakeCategoryRepo(),
@@ -112,6 +114,9 @@ func TestInsightServiceDiagnose(t *testing.T) {
 	}
 
 	got := f.ai.got
+	if got.SavingsGoal == nil || *got.SavingsGoal != (finance.Money{Cents: 100_000_00, Currency: "CRC"}) {
+		t.Errorf("SavingsGoal = %v, se esperaba la meta del usuario en su moneda", got.SavingsGoal)
+	}
 	if len(got.Finances) != 1 {
 		t.Fatalf("Finances = %+v, se esperaba solo CRC", got.Finances)
 	}

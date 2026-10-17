@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"bytebalance/internal/domain/finance"
 	"bytebalance/internal/domain/habit"
 	"bytebalance/internal/domain/insight"
 )
@@ -23,10 +24,11 @@ var sampleSnapshot = insight.Snapshot{
 	From: time.Date(2026, 9, 17, 0, 0, 0, 0, time.UTC),
 	To:   time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC),
 	Finances: []insight.CurrencySummary{{
-		Currency: "CRC", IncomeCents: 600_000_00, ExpenseCents: 450_000_50, Transactions: 12,
+		Currency: "CRC", IncomeCents: 600_000_00, ExpenseCents: 450_000_50, SavingsCents: 80_000_00, Transactions: 12,
 		TopExpenses: []insight.CategoryAmount{{Name: "Comida", Cents: 200_000_00}},
 	}},
-	Habits: []insight.HabitSummary{{Name: "Meditar", Frequency: habit.Daily, TargetCount: 1, PeriodsMet: 12, PeriodsTotal: 29, CurrentStreak: 3}},
+	Habits:      []insight.HabitSummary{{Name: "Meditar", Frequency: habit.Daily, TargetCount: 1, PeriodsMet: 12, PeriodsTotal: 29, CurrentStreak: 3}},
+	SavingsGoal: &finance.Money{Cents: 100_000_00, Currency: "CRC"},
 }
 
 const diagnosisText = `{"headline":"Ahorras el 25 %","summary":"Vas bien.","finance_insights":["Comida es tu mayor gasto"],"habit_insights":["Meditar: 12 de 29 días"],"suggestions":[{"title":"Tope","detail":"Fija 180 000 CRC para comida"}]}`
@@ -102,7 +104,7 @@ func TestDiagnose(t *testing.T) {
 		t.Errorf("generationConfig = %+v", cfg)
 	}
 	prompt := got.body.Contents[0].Parts[0].Text
-	for _, want := range []string{`"moneda":"CRC"`, `"gastos":"450 000,50"`, `"tasa_de_ahorro_pct":25`, `"categoría":"Comida"`, `"hábito":"Meditar"`, `"frecuencia":"diaria"`, `"desde":"2026-09-17"`} {
+	for _, want := range []string{`"moneda":"CRC"`, `"gastos":"450 000,50"`, `"excedente_pct":25`, `"apartado_al_ahorro":"80 000"`, `"meta_de_ahorro_mensual":{"moneda":"CRC","monto":"100 000"}`, `"categoría":"Comida"`, `"hábito":"Meditar"`, `"frecuencia":"diaria"`, `"desde":"2026-09-17"`} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("el prompt no contiene %s:\n%s", want, prompt)
 		}

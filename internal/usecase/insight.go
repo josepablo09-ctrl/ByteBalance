@@ -118,7 +118,11 @@ func (s *InsightService) snapshot(ctx context.Context, userID domain.ID) (insigh
 	if err != nil {
 		return insight.Snapshot{}, err
 	}
-	return insight.Snapshot{From: from, To: today, Finances: finances, Habits: habits}, nil
+	snapshot := insight.Snapshot{From: from, To: today, Finances: finances, Habits: habits}
+	if g := u.MonthlySavingsGoalCents; g != nil {
+		snapshot.SavingsGoal = &finance.Money{Cents: *g, Currency: u.DefaultCurrency}
+	}
+	return snapshot, nil
 }
 
 func (s *InsightService) summarizeFinances(ctx context.Context, userID domain.ID, previousStart, currentStart, end time.Time) ([]insight.CurrencySummary, error) {
