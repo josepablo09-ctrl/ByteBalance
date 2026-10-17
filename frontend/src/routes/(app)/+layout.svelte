@@ -5,6 +5,7 @@
 	import AppHeader from '#lib/components/AppHeader.svelte';
 	import Button from '#lib/components/Button.svelte';
 	import Sidebar from '#lib/components/Sidebar.svelte';
+	import { lastInsight } from '#lib/stores/insight.js';
 	import { profile } from '#lib/stores/profile.js';
 	import { session } from '#lib/stores/session.js';
 
@@ -14,10 +15,11 @@
 	let isMenuOpen = $state(false);
 
 	// Si la sesión termina (logout o token rechazado por la API), se olvida el
-	// perfil y se vuelve al login.
+	// perfil (y su último análisis) y se vuelve al login.
 	$effect(() => {
 		if (!$session) {
 			profile.reset();
+			lastInsight.reset();
 			goto(resolve('/(auth)/login'), { replaceState: true });
 		}
 	});

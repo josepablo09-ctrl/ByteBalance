@@ -1,6 +1,7 @@
 <script>
 	import { onMount } from 'svelte';
-	import { errorMessage, financeApi } from '#lib/api/index.js';
+	import { aiApi, errorMessage, financeApi } from '#lib/api/index.js';
+	import AIInsightCard from '#lib/components/AIInsightCard.svelte';
 	import Alert from '#lib/components/Alert.svelte';
 	import Button from '#lib/components/Button.svelte';
 	import FinanceSummary from '#lib/components/FinanceSummary.svelte';
@@ -137,6 +138,8 @@
 	{/if}
 
 	<FinanceSummary bind:this={summary} currency={user.default_currency} timeZone={user.timezone} />
+
+	<AIInsightCard ai={aiApi} timeZone={user.timezone} />
 
 	<RecentTransactions
 		bind:this={recent}

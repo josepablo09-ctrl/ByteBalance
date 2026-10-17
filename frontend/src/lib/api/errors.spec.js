@@ -14,6 +14,12 @@ describe('errorMessage', () => {
 		[apiError({ status: 429, code: 'too_many_requests', retryAfter: 60 }), /Espera 1 minuto /],
 		[apiError({ status: 429, code: 'too_many_requests', retryAfter: 150 }), /Espera 3 minutos/],
 		[apiError({ status: 429, code: 'too_many_requests' }), /Espera un momento/],
+		[apiError({ status: 503, code: 'ai_disabled' }), /aún no está disponible/],
+		[apiError({ status: 503, code: 'ai_unavailable' }), /servicio de IA está saturado/],
+		[
+			apiError({ status: 422, code: 'not_enough_data', message: 'aún no hay datos para analizar' }),
+			'Aún no hay datos para analizar.'
+		],
 		[
 			apiError({ status: 422, code: 'invalid_input', message: 'el nombre es obligatorio' }),
 			'El nombre es obligatorio.'

@@ -1,5 +1,6 @@
 import { API_URL } from '#lib/config.js';
 import { session } from '#lib/stores/session.js';
+import { createAIApi } from './ai.js';
 import { createAuthApi } from './auth.js';
 import { createApiClient } from './client.js';
 import { createFinanceApi } from './finance.js';
@@ -20,3 +21,4 @@ export const authApi = createAuthApi(api);
 export const financeApi = createFinanceApi(api);
 export const habitsApi = createHabitsApi(api);
 export const telegramApi = createTelegramApi(api);
+export const aiApi = createAIApi(api);

@@ -26,6 +26,10 @@ export function errorMessage(err) {
 				: 'Demasiados intentos. Espera un momento antes de volver a intentarlo.';
 		case 'unauthorized':
 			return 'Tu sesión expiró. Inicia sesión de nuevo.';
+		case 'ai_disabled':
+			return 'El análisis inteligente aún no está disponible en este servidor.';
+		case 'ai_unavailable':
+			return 'El servicio de IA está saturado o no responde. Inténtalo de nuevo en unos minutos.';
 	}
 	if ((err.status === 400 || err.status === 422) && err.message) {
 		return capitalize(err.message) + (err.message.endsWith('.') ? '' : '.');
