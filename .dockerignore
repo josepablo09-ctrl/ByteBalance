@@ -1,0 +1,24 @@
+# El contexto de build solo necesita el código Go y las migraciones.
+# Ningún secreto debe llegar a la imagen.
+.env
+.env.*
+*.pem
+*.key
+
+.git
+.gitattributes
+.vscode
+.idea
+
+frontend
+docs
+scripts
+deploy
+bin
+tmp
+coverage.*
+*.log
+*.md
+docker-compose.yml
+Dockerfile
+.dockerignore
