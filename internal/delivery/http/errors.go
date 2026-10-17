@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"bytebalance/internal/domain"
+	"bytebalance/internal/domain/insight"
 	"bytebalance/internal/usecase"
 )
 
@@ -22,6 +23,11 @@ func respondError(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, http.StatusUnauthorized, "invalid_credentials", "email o contraseña incorrectos")
 	case errors.Is(err, usecase.ErrTelegramNotLinked):
 		writeError(w, http.StatusConflict, "telegram_not_linked", "tu cuenta no tiene Telegram vinculado")
+	case errors.Is(err, insight.ErrNotEnoughData):
+		writeError(w, http.StatusUnprocessableEntity, "not_enough_data", "aún no hay datos para analizar: registra algunas transacciones o crea un hábito")
+	case errors.Is(err, usecase.ErrAIUnavailable):
+		// El detalle ya lo registró el caso de uso; no se expone al cliente.
+		writeError(w, http.StatusServiceUnavailable, "ai_unavailable", "el análisis con IA no está disponible en este momento; intenta de nuevo en unos minutos")
 	case errors.Is(err, usecase.ErrEmailTaken):
 		writeError(w, http.StatusConflict, "email_taken", "el email ya está registrado")
 	case errors.Is(err, domain.ErrInvalidInput):

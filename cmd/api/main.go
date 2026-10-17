@@ -25,6 +25,7 @@ import (
 	"bytebalance/internal/domain/finance"
 	"bytebalance/internal/domain/habit"
 	"bytebalance/internal/domain/user"
+	"bytebalance/internal/integration/gemini"
 	"bytebalance/internal/integration/telegram"
 	"bytebalance/internal/repository/postgres"
 	"bytebalance/internal/scheduler"
@@ -110,6 +111,15 @@ func newApp(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) (app, er
 		slog.Info("telegram activado", "bot", me.Username)
 	} else {
 		slog.Info("telegram desactivado: TELEGRAM_BOT_TOKEN vacía")
+	}
+
+	if cfg.GeminiEnabled() {
+		ai := gemini.NewClient(cfg.GeminiAPIURL, cfg.GeminiAPIKey, cfg.GeminiModel)
+		services.Insights = usecase.NewInsightService(repos.users, repos.categories, repos.transactions,
+			repos.habits, repos.habitLogs, ai, time.Now)
+		slog.Info("análisis con IA activado", "model", ai.Model())
+	} else {
+		slog.Info("análisis con IA desactivado: GEMINI_API_KEY vacía")
 	}
 
 	a.handler = httpdelivery.NewRouter(services, httpdelivery.Options{

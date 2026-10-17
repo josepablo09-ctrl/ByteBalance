@@ -56,6 +56,9 @@ type Services struct {
 	// Telegram es nil si el servidor no tiene bot configurado; sus endpoints
 	// responden entonces 503.
 	Telegram TelegramService
+	// Insights es nil si el servidor no tiene llave de Gemini; el análisis
+	// con IA responde entonces 503.
+	Insights InsightService
 	Tokens   TokenVerifier
 	DB       Pinger
 }
@@ -77,6 +80,8 @@ type api struct {
 	opts               Options
 	loginLimits        *loginThrottle
 	telegramLinkLimits *limiter
+	aiUserLimits       *limiter
+	aiGlobalLimits     *limiter
 }
 
 // NewRouter construye el handler HTTP con todas las rutas de la API v1.
@@ -87,6 +92,8 @@ func NewRouter(s Services, opts Options) http.Handler {
 		opts:               opts,
 		loginLimits:        newLoginThrottle(time.Now),
 		telegramLinkLimits: newLimiter(telegramLinkBurst, telegramLinkInterval, time.Now),
+		aiUserLimits:       newLimiter(aiUserBurst, aiUserInterval, time.Now),
+		aiGlobalLimits:     newLimiter(aiGlobalBurst, aiGlobalInterval, time.Now),
 	}
 	protected := func(fn http.HandlerFunc) http.Handler { return requireAuth(s.Tokens, fn) }
 
@@ -118,6 +125,9 @@ func NewRouter(s Services, opts Options) http.Handler {
 	mux.Handle("POST /api/v1/telegram/link", protected(a.createTelegramLink))
 	mux.Handle("DELETE /api/v1/telegram/link", protected(a.deleteTelegramLink))
 	mux.Handle("POST /api/v1/telegram/test", protected(a.sendTelegramTest))
+
+	mux.Handle("GET /api/v1/ai", protected(a.aiStatus))
+	mux.Handle("POST /api/v1/ai/diagnose", protected(a.diagnose))
 
 	return recoverPanics(cors(opts.AllowedOrigins, mux))
 }
