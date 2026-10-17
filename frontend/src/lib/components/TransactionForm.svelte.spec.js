@@ -181,4 +181,50 @@ describe('TransactionForm al editar', () => {
 			expect.objectContaining({ type: 'income', category_id: null })
 		);
 	});
+
+	it('aparta dinero al ahorro sin categoría y lo explica', async () => {
+		const { onSubmit } = renderForm();
+
+		await categorySelect().selectOptions('Supermercado');
+		await page.getByRole('button', { name: 'Ahorro', exact: true }).click();
+
+		await expect
+			.element(page.getByRole('button', { name: 'Ahorro', exact: true }))
+			.toHaveAttribute('aria-pressed', 'true');
+		await expect
+			.element(page.getByRole('button', { name: 'Gasto', exact: true }))
+			.toHaveAttribute('aria-pressed', 'false');
+		await expect.element(categorySelect()).not.toBeInTheDocument();
+		await expect.element(page.getByText(/Tu balance total no cambia/)).toBeVisible();
+
+		await amountInput().fill('50000');
+		await page.getByRole('button', { name: 'Apartar al ahorro' }).click();
+
+		expect(onSubmit).toHaveBeenCalledWith({
+			type: 'saving',
+			amount_cents: 5000000,
+			currency: 'CRC',
+			category_id: null,
+			description: ''
+		});
+	});
+
+	it('muestra el error de la API al retirar más de lo ahorrado', async () => {
+		const onSubmit = vi.fn().mockRejectedValue(
+			new ApiError({
+				status: 422,
+				code: 'invalid_input',
+				message: 'no puedes retirar más de lo que tienes ahorrado (ahorro en CRC: 700.00)'
+			})
+		);
+		renderForm({ onSubmit });
+
+		await page.getByRole('button', { name: 'Retiro', exact: true }).click();
+		await amountInput().fill('1000');
+		await page.getByRole('button', { name: 'Retirar del ahorro' }).click();
+
+		await expect
+			.element(page.getByRole('alert'))
+			.toHaveTextContent(/No puedes retirar más de lo que tienes ahorrado/);
+	});
 });

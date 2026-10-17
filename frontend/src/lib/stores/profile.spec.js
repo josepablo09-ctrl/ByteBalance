@@ -56,4 +56,17 @@ describe('createProfileStore', () => {
 
 		expect(get(store)).toEqual({ status: 'idle', user: null, error: '' });
 	});
+
+	it('reemplaza el perfil tras modificarlo y descarta cargas anteriores', async () => {
+		const pending = deferred();
+		const store = createProfileStore(() => pending.promise);
+		const loading = store.load();
+
+		const updated = { ...user, monthly_savings_goal_cents: 100_000_00 };
+		store.replace(updated);
+		pending.resolve(user);
+		await loading;
+
+		expect(get(store)).toEqual({ status: 'ready', user: updated, error: '' });
+	});
 });

@@ -1,5 +1,6 @@
 <script>
 	import { formatShortDate } from '#lib/dates.js';
+	import { availableEffect, ENTRY_TYPES } from '#lib/entryTypes.js';
 	import { formatMoney } from '#lib/money.js';
 	import Icon from './Icon.svelte';
 
@@ -23,41 +24,35 @@
 
 <ul class="divide-y divide-zinc-800/70">
 	{#each transactions as transaction (transaction.id)}
-		{@const isIncome = transaction.type === 'income'}
+		{@const info = ENTRY_TYPES[transaction.type]}
 		{@const category = transaction.category_id
 			? categoriesById.get(transaction.category_id)
 			: undefined}
-		{@const title = transaction.description || category?.name || (isIncome ? 'Ingreso' : 'Gasto')}
+		{@const title = transaction.description || category?.name || info.title}
 		<li class="flex items-center gap-3 py-3 pr-2 pl-4 sm:pl-5">
 			<span
 				class={[
 					'grid size-8 shrink-0 place-items-center rounded-md border border-zinc-800 bg-zinc-900',
-					isIncome ? 'text-emerald-400' : 'text-zinc-400'
+					transaction.type === 'expense' ? 'text-zinc-400' : info.tone
 				]}
 				aria-hidden="true"
 			>
-				<Icon name={isIncome ? 'income' : 'expense'} />
+				<Icon name={info.icon} />
 			</span>
 			<div class="min-w-0 flex-1">
 				<p class="truncate text-sm text-zinc-200">{title}</p>
 				<p class="truncate text-xs text-zinc-500">
-					{category?.name ?? 'Sin categoría'} · {formatShortDate(transaction.occurred_at, timeZone)}
+					{info.categorizable ? (category?.name ?? 'Sin categoría') : info.title} · {formatShortDate(
+						transaction.occurred_at,
+						timeZone
+					)}
 				</p>
 			</div>
-			<p
-				class={[
-					'shrink-0 text-sm font-medium tabular-nums',
-					isIncome ? 'text-emerald-400' : 'text-zinc-200'
-				]}
-			>
-				<span class="sr-only">{isIncome ? 'Ingreso de' : 'Gasto de'}</span>
-				{formatMoney(
-					isIncome ? transaction.amount_cents : -transaction.amount_cents,
-					transaction.currency,
-					{
-						signDisplay: 'always'
-					}
-				)}
+			<p class={['shrink-0 text-sm font-medium tabular-nums', info.tone]}>
+				<span class="sr-only">{info.srPrefix}</span>
+				{formatMoney(availableEffect(transaction), transaction.currency, {
+					signDisplay: 'always'
+				})}
 			</p>
 			<div class="flex shrink-0">
 				<button

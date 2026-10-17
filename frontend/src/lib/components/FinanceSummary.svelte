@@ -5,20 +5,25 @@
 	import { formatMoney } from '#lib/money.js';
 	import Alert from './Alert.svelte';
 	import Button from './Button.svelte';
+	import AvailableBreakdown from './AvailableBreakdown.svelte';
+	import SavingsCard from './SavingsCard.svelte';
 	import SummaryCard from './SummaryCard.svelte';
 
 	/**
-	 * Tarjetas de balance total e ingresos y gastos del mes, en la moneda
-	 * principal del usuario. Los montos en otras monedas se listan aparte: no se
-	 * suman porque no hay tipo de cambio.
+	 * Tarjetas de balance total, ingresos, gastos y ahorro del mes, y el desglose
+	 * del disponible real para gastar, en la moneda principal del usuario. Los
+	 * montos en otras monedas se listan aparte: no se suman porque no hay tipo de
+	 * cambio.
 	 *
 	 * @typedef {object} Props
 	 * @property {string} currency Moneda principal del usuario.
 	 * @property {string} timeZone
+	 * @property {number | null} savingsGoalCents Meta de ahorro mensual, en `currency`.
+	 * @property {(goalCents: number | null) => Promise<void>} onSaveGoal
 	 */
 
 	/** @type {Props} */
-	let { currency, timeZone } = $props();
+	let { currency, timeZone, savingsGoalCents, onSaveGoal } = $props();
 
 	/** @type {import('#lib/api/finance.js').Balance[]} */
 	let allTime = $state([]);
@@ -34,7 +39,11 @@
 			currency,
 			income_cents: 0,
 			expense_cents: 0,
-			net_cents: 0
+			net_cents: 0,
+			saved_cents: 0,
+			withdrawn_cents: 0,
+			savings_cents: 0,
+			available_cents: 0
 		};
 
 	const total = $derived(inCurrency(allTime));
@@ -72,7 +81,7 @@
 		</div>
 	{/if}
 
-	<div class="grid gap-4 sm:grid-cols-3">
+	<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
 		<SummaryCard
 			label="Balance total"
 			value={formatMoney(total.net_cents, currency)}
@@ -93,7 +102,24 @@
 			hint={monthLabel(timeZone)}
 			{isLoading}
 		/>
+		<SavingsCard
+			monthCents={month.savings_cents}
+			totalCents={total.savings_cents}
+			{currency}
+			monthLabel={monthLabel(timeZone)}
+			goalCents={savingsGoalCents}
+			{isLoading}
+			{onSaveGoal}
+		/>
 	</div>
+
+	<AvailableBreakdown
+		netCents={total.net_cents}
+		savingsCents={total.savings_cents}
+		availableCents={total.available_cents}
+		{currency}
+		{isLoading}
+	/>
 
 	{#if !isLoading && otherCurrencies.length > 0}
 		<p class="text-xs text-zinc-500">

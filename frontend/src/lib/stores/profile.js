@@ -51,7 +51,19 @@ export function createProfileStore(fetchProfile) {
 		store.set(INITIAL);
 	}
 
-	return { subscribe: store.subscribe, load, reset };
+	/**
+	 * Reemplaza el perfil por la versión que devolvió la API tras modificarlo
+	 * (p. ej. la meta de ahorro), sin volver a pedirlo.
+	 *
+	 * @param {import('#lib/api/auth.js').User} user
+	 */
+	function replace(user) {
+		generation++;
+		pending = null;
+		store.set({ status: 'ready', user, error: '' });
+	}
+
+	return { subscribe: store.subscribe, load, reset, replace };
 }
 
 /** Perfil del usuario con sesión iniciada. */

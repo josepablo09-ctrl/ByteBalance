@@ -13,6 +13,8 @@
  * @property {string} default_currency Código ISO 4217.
  * @property {string} timezone Zona horaria IANA.
  * @property {boolean} telegram_linked
+ * @property {number | null} monthly_savings_goal_cents Meta de ahorro mensual en
+ *   `default_currency`; `null` si no hay meta.
  * @property {string} created_at Fecha RFC 3339.
  */
 
@@ -46,7 +48,16 @@ export function createAuthApi(client) {
 		register: (input) => client.post('/users', input),
 
 		/** @returns {Promise<User>} */
-		me: () => client.get('/users/me')
+		me: () => client.get('/users/me'),
+
+		/**
+		 * Cambia preferencias del perfil; solo cambian los campos enviados y
+		 * `monthly_savings_goal_cents: null` quita la meta de ahorro.
+		 *
+		 * @param {{ monthly_savings_goal_cents?: number | null }} changes
+		 * @returns {Promise<User>}
+		 */
+		updateMe: (changes) => client.patch('/users/me', changes)
 	};
 }
 

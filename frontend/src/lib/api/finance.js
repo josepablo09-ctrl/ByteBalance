@@ -1,10 +1,17 @@
-/** @typedef {'income' | 'expense'} EntryType */
+/**
+ * Tipo de movimiento. `saving` aparta dinero del disponible al ahorro y
+ * `withdrawal` lo devuelve; ninguno cambia el balance total.
+ *
+ * @typedef {'income' | 'expense' | 'saving' | 'withdrawal'} EntryType
+ */
+
+/** @typedef {'income' | 'expense'} CategoryType Las categorías son solo de ingresos o gastos. */
 
 /**
  * @typedef {object} Category
  * @property {string} id
  * @property {string} name
- * @property {EntryType} type
+ * @property {CategoryType} type
  * @property {string} created_at
  */
 
@@ -25,7 +32,11 @@
  * @property {string} currency
  * @property {number} income_cents
  * @property {number} expense_cents
- * @property {number} net_cents
+ * @property {number} net_cents Balance total: ingresos menos gastos.
+ * @property {number} saved_cents Apartado al ahorro.
+ * @property {number} withdrawn_cents Retirado del ahorro.
+ * @property {number} savings_cents Ahorro neto: apartado menos retirado.
+ * @property {number} available_cents Disponible real para gastar: `net_cents - savings_cents`.
  */
 
 /**
@@ -66,7 +77,7 @@ export function createFinanceApi(client) {
 
 		/**
 		 * @param {string} name
-		 * @param {EntryType} type
+		 * @param {CategoryType} type
 		 * @returns {Promise<Category>}
 		 */
 		createCategory: (name, type) => client.post('/categories', { name, type }),

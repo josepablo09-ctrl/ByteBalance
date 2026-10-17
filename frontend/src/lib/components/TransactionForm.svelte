@@ -2,6 +2,7 @@
 	import { errorMessage } from '#lib/api/errors.js';
 	import { currencyOptions } from '#lib/currencies.js';
 	import { todayInZone } from '#lib/dates.js';
+	import { ENTRY_TYPES } from '#lib/entryTypes.js';
 	import { centsToDecimal } from '#lib/money.js';
 	import {
 		buildTransactionInput,
@@ -18,10 +19,16 @@
 	/** Valor del selector de categoría que abre la creación de una nueva. */
 	const NEW_CATEGORY = '__new__';
 
-	const TYPE_OPTIONS = [
-		{ value: 'expense', label: 'Gasto' },
-		{ value: 'income', label: 'Ingreso' }
-	];
+	const TYPE_OPTIONS = /** @type {const} */ (['expense', 'income', 'saving', 'withdrawal']).map(
+		(value) => ({ value, label: ENTRY_TYPES[value].label })
+	);
+
+	/** Explicación de los movimientos de ahorro, que no son ingresos ni gastos. */
+	const SAVINGS_HINTS = {
+		saving:
+			'Sale de tu disponible para gastar y suma a tu ahorro. Tu balance total no cambia: el dinero sigue siendo tuyo.',
+		withdrawal: 'Sale de tu ahorro y vuelve a tu disponible para gastar.'
+	};
 
 	/**
 	 * @typedef {import('#lib/api/finance.js').Category} Category
@@ -34,7 +41,7 @@
 	 * @property {import('#lib/api/finance.js').Transaction} [transaction] Si se indica, se edita.
 	 * @property {(input: import('#lib/api/finance.js').RecordTransactionInput) => Promise<void>} onSubmit
 	 *   Registra (o guarda los cambios de) la transacción; si falla debe lanzar el error de la API.
-	 * @property {(name: string, type: EntryType) => Promise<Category>} onCreateCategory
+	 * @property {(name: string, type: import('#lib/api/finance.js').CategoryType) => Promise<Category>} onCreateCategory
 	 * @property {() => void} oncancel
 	 */
 
@@ -75,10 +82,12 @@
 		{ value: NEW_CATEGORY, label: '+ Nueva categoría…' }
 	]);
 
+	const typeInfo = $derived(ENTRY_TYPES[type]);
+
 	/** @param {string} next */
 	function handleTypeChange(next) {
 		type = /** @type {EntryType} */ (next);
-		// Una categoría de gastos no aplica a un ingreso, y viceversa.
+		// Una categoría de gastos no aplica a un ingreso, y viceversa; el ahorro no lleva categoría.
 		if (!categories.some((c) => c.id === categoryId && c.type === type)) categoryId = '';
 		isCreatingCategory = false;
 	}
@@ -97,7 +106,10 @@
 		if (categoryError) return;
 		isSavingCategory = true;
 		try {
-			const category = await onCreateCategory(newCategoryName.trim(), type);
+			const category = await onCreateCategory(
+				newCategoryName.trim(),
+				/** @type {import('#lib/api/finance.js').CategoryType} */ (type)
+			);
 			categoryId = category.id;
 			isCreatingCategory = false;
 		} catch (err) {
@@ -175,7 +187,13 @@
 		/>
 	</div>
 
-	{#if isCreatingCategory}
+	{#if type === 'saving' || type === 'withdrawal'}
+		<p
+			class="rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2.5 text-xs leading-relaxed text-zinc-400"
+		>
+			{SAVINGS_HINTS[type]}
+		</p>
+	{:else if isCreatingCategory}
 		<div class="space-y-2 rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
 			<TextField
 				id="new_category"
@@ -214,7 +232,7 @@
 	<TextField
 		id="description"
 		label="Descripción"
-		placeholder={type === 'income' ? 'Pago de octubre' : 'Compra semanal'}
+		placeholder={typeInfo.placeholder}
 		maxlength={MAX_DESCRIPTION_LENGTH}
 		bind:value={description}
 		error={errors.description}
@@ -233,13 +251,7 @@
 	<div class="flex justify-end gap-2 border-t border-zinc-800 pt-5">
 		<Button variant="secondary" onclick={oncancel}>Cancelar</Button>
 		<Button type="submit" loading={isSubmitting}>
-			{isSubmitting
-				? 'Guardando…'
-				: transaction
-					? 'Guardar cambios'
-					: type === 'income'
-						? 'Registrar ingreso'
-						: 'Registrar gasto'}
+			{isSubmitting ? 'Guardando…' : transaction ? 'Guardar cambios' : typeInfo.submitLabel}
 		</Button>
 	</div>
 </form>

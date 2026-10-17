@@ -13,7 +13,8 @@
 	const TYPE_FILTERS = [
 		{ value: 'all', label: 'Todas' },
 		{ value: 'income', label: 'Ingresos' },
-		{ value: 'expense', label: 'Gastos' }
+		{ value: 'expense', label: 'Gastos' },
+		{ value: 'saving', label: 'Ahorro' }
 	];
 
 	const PERIOD_FILTERS = [
@@ -77,7 +78,9 @@
 	function currentFilter() {
 		/** @type {import('#lib/api/finance.js').TransactionFilter} */
 		const filter = { limit: PAGE_SIZE };
-		if (typeFilter === 'income' || typeFilter === 'expense') filter.type = typeFilter;
+		if (typeFilter !== 'all') {
+			filter.type = /** @type {import('#lib/api/finance.js').EntryType} */ (typeFilter);
+		}
 		if (periodFilter !== 'all') {
 			Object.assign(filter, monthRange(timeZone, new Date(), periodFilter === 'previous' ? -1 : 0));
 		}

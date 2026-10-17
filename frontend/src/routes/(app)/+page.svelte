@@ -1,6 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
-	import { aiApi, errorMessage, financeApi } from '#lib/api/index.js';
+	import { aiApi, authApi, errorMessage, financeApi } from '#lib/api/index.js';
 	import AIInsightCard from '#lib/components/AIInsightCard.svelte';
 	import Alert from '#lib/components/Alert.svelte';
 	import Button from '#lib/components/Button.svelte';
@@ -10,6 +10,7 @@
 	import RecentTransactions from '#lib/components/RecentTransactions.svelte';
 	import TransactionForm from '#lib/components/TransactionForm.svelte';
 	import { formatShortDate } from '#lib/dates.js';
+	import { availableEffect, ENTRY_TYPES } from '#lib/entryTypes.js';
 	import { formatMoney } from '#lib/money.js';
 	import { profile } from '#lib/stores/profile.js';
 
@@ -50,8 +51,14 @@
 	async function handleRecord(input) {
 		await financeApi.recordTransaction(input);
 		isFormOpen = false;
-		showNotice(input.type === 'income' ? 'Ingreso registrado.' : 'Gasto registrado.');
+		showNotice(ENTRY_TYPES[input.type].notice);
 		refreshAll();
+	}
+
+	/** @param {number | null} goalCents */
+	async function handleSaveGoal(goalCents) {
+		profile.replace(await authApi.updateMe({ monthly_savings_goal_cents: goalCents }));
+		showNotice(goalCents ? 'Meta de ahorro guardada.' : 'Meta de ahorro eliminada.');
 	}
 
 	/** Vuelve a pedir el resumen y la lista tras un cambio. */
@@ -93,7 +100,7 @@
 
 	/**
 	 * @param {string} name
-	 * @param {import('#lib/api/finance.js').EntryType} type
+	 * @param {import('#lib/api/finance.js').CategoryType} type
 	 */
 	async function handleCreateCategory(name, type) {
 		const category = await financeApi.createCategory(name, type);
@@ -122,7 +129,7 @@
 	<div class="flex flex-wrap items-end justify-between gap-4">
 		<div>
 			<h1 class="text-2xl font-semibold tracking-tight text-zinc-50">Finanzas</h1>
-			<p class="mt-1 text-sm text-zinc-400">Tu balance, tus ingresos y tus gastos.</p>
+			<p class="mt-1 text-sm text-zinc-400">Tu balance, tus ingresos, tus gastos y tu ahorro.</p>
 		</div>
 		<Button onclick={() => (isFormOpen = true)}>
 			<Icon name="plus" />
@@ -137,7 +144,13 @@
 		<Alert message={`No se pudieron cargar las categorías. ${categoriesError}`} />
 	{/if}
 
-	<FinanceSummary bind:this={summary} currency={user.default_currency} timeZone={user.timezone} />
+	<FinanceSummary
+		bind:this={summary}
+		currency={user.default_currency}
+		timeZone={user.timezone}
+		savingsGoalCents={user.monthly_savings_goal_cents ?? null}
+		onSaveGoal={handleSaveGoal}
+	/>
 
 	<AIInsightCard ai={aiApi} timeZone={user.timezone} />
 
@@ -154,7 +167,7 @@
 <Modal
 	bind:open={isFormOpen}
 	title="Nueva transacción"
-	description="Registra un ingreso o un gasto."
+	description="Registra un ingreso, un gasto o un movimiento de tu ahorro."
 >
 	<TransactionForm
 		{categories}
@@ -189,28 +202,28 @@
 	title="Eliminar transacción"
 >
 	{#if deleteTarget}
-		{@const isIncome = deleteTarget.type === 'income'}
+		{@const info = ENTRY_TYPES[deleteTarget.type]}
 		<div class="space-y-4">
 			{#if deleteError}
 				<Alert message={deleteError} />
 			{/if}
 			<div class="rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-3">
 				<p class="text-sm text-zinc-200">
-					{deleteTarget.description || (isIncome ? 'Ingreso' : 'Gasto')}
+					{deleteTarget.description || info.title}
 				</p>
 				<p class="mt-0.5 text-xs text-zinc-500">
 					{formatShortDate(deleteTarget.occurred_at, user.timezone)} ·
-					<span class={isIncome ? 'text-emerald-400' : 'text-zinc-300'}>
-						{formatMoney(
-							isIncome ? deleteTarget.amount_cents : -deleteTarget.amount_cents,
-							deleteTarget.currency,
-							{ signDisplay: 'always' }
-						)}
+					<span class={info.tone}>
+						{formatMoney(availableEffect(deleteTarget), deleteTarget.currency, {
+							signDisplay: 'always'
+						})}
 					</span>
 				</p>
 			</div>
 			<p class="text-sm text-zinc-400">
-				Dejará de contar en tu balance. Esta acción no se puede deshacer.
+				{info.categorizable
+					? 'Dejará de contar en tu balance.'
+					: 'Dejará de contar en tu ahorro y en tu disponible.'} Esta acción no se puede deshacer.
 			</p>
 		</div>
 		<div class="mt-6 flex justify-end gap-2 border-t border-zinc-800 pt-5">
