@@ -102,10 +102,77 @@ func (s *FinanceService) RecordTransaction(ctx context.Context, userID domain.ID
 		return nil, fmt.Errorf("registrar transacción: %w", err)
 	}
 
+	if err := s.ensureSavingsCovered(ctx, userID, nil, t); err != nil {
+		return nil, fmt.Errorf("registrar transacción: %w", err)
+	}
 	if err := s.transactions.Create(ctx, t); err != nil {
 		return nil, fmt.Errorf("registrar transacción: %w", err)
 	}
 	return t, nil
+}
+
+// ensureSavingsCovered comprueba que, al quitar removed y agregar added (cualquiera
+// puede ser nil), el ahorro de ninguna moneda quede negativo: no se puede
+// retirar más de lo apartado. Solo consulta la base si interviene un movimiento
+// de ahorro.
+func (s *FinanceService) ensureSavingsCovered(ctx context.Context, userID domain.ID, removed, added *finance.Transaction) error {
+	isSavings := func(t *finance.Transaction) bool { return t != nil && t.Type.IsSavings() }
+	if !isSavings(removed) && !isSavings(added) {
+		return nil
+	}
+	all, err := s.transactions.List(ctx, userID, finance.TransactionFilter{})
+	if err != nil {
+		return fmt.Errorf("calcular ahorro: %w", err)
+	}
+	// current es el ahorro actual por moneda (una moneda sin movimientos vale cero).
+	current := map[domain.Currency]int64{}
+	for _, b := range finance.Summarize(all) {
+		current[b.Currency] = b.SavingsCents()
+	}
+
+	// Solo se revisan las monedas que toca el cambio.
+	for _, t := range []*finance.Transaction{removed, added} {
+		if !isSavings(t) {
+			continue
+		}
+		currency := t.Amount.Currency
+		// base es el ahorro sin la versión anterior de la transacción.
+		base := current[currency]
+		if isSavings(removed) && removed.Amount.Currency == currency {
+			base -= savingsEffect(removed)
+		}
+		after := base
+		if isSavings(added) && added.Amount.Currency == currency {
+			after += savingsEffect(added)
+		}
+		if after >= 0 {
+			continue
+		}
+		if isSavings(added) && added.Type == finance.Withdrawal && added.Amount.Currency == currency {
+			return fmt.Errorf("%w: no puedes retirar más de lo que tienes ahorrado (ahorro en %s: %s)",
+				domain.ErrInvalidInput, currency, formatCents(max(base, 0)))
+		}
+		return fmt.Errorf("%w: este cambio dejaría tu ahorro en %s en negativo, porque ya retiraste parte de ese dinero; ajusta primero los retiros",
+			domain.ErrInvalidInput, currency)
+	}
+	return nil
+}
+
+// savingsEffect devuelve cuánto cambia t el ahorro: suma si aparta y resta si retira.
+func savingsEffect(t *finance.Transaction) int64 {
+	switch t.Type {
+	case finance.Saving:
+		return t.Amount.Cents
+	case finance.Withdrawal:
+		return -t.Amount.Cents
+	default:
+		return 0
+	}
+}
+
+// formatCents escribe un monto en unidades con dos decimales (p. ej. "1234.50").
+func formatCents(cents int64) string {
+	return fmt.Sprintf("%d.%02d", cents/100, cents%100)
 }
 
 // resolveCurrency valida la moneda indicada o, si está vacía, usa la del usuario.
@@ -135,14 +202,19 @@ type UpdateTransactionInput struct {
 // UpdateTransaction corrige una transacción del usuario. Si algún valor es
 // inválido no se guarda ningún cambio. La categoría se vuelve a comprobar solo
 // si cambia ella o el tipo, porque debe ser del mismo tipo que la transacción.
+// Al convertirla en un movimiento de ahorro, su categoría se quita.
 func (s *FinanceService) UpdateTransaction(ctx context.Context, userID, transactionID domain.ID, in UpdateTransactionInput) (*finance.Transaction, error) {
 	t, err := s.transactions.GetByID(ctx, userID, transactionID)
 	if err != nil {
 		return nil, fmt.Errorf("actualizar transacción: %w", err)
 	}
+	before := *t
 	typeChanged := in.Type != nil && *in.Type != t.Type
 	if in.Type != nil {
 		t.Type = *in.Type
+	}
+	if typeChanged && t.Type.IsSavings() && !in.SetCategory {
+		t.ClearCategory()
 	}
 	if in.AmountCents != nil {
 		t.Amount.Cents = *in.AmountCents
@@ -182,6 +254,9 @@ func (s *FinanceService) UpdateTransaction(ctx context.Context, userID, transact
 		}
 	}
 
+	if err := s.ensureSavingsCovered(ctx, userID, &before, t); err != nil {
+		return nil, fmt.Errorf("actualizar transacción: %w", err)
+	}
 	if err := s.transactions.Update(ctx, t); err != nil {
 		return nil, fmt.Errorf("actualizar transacción: %w", err)
 	}
@@ -190,7 +265,15 @@ func (s *FinanceService) UpdateTransaction(ctx context.Context, userID, transact
 
 // DeleteTransaction elimina (borrado lógico) una transacción del usuario; deja
 // de contar en el balance. Una transacción ajena se reporta como inexistente.
+// No se puede eliminar un aporte al ahorro si eso dejara el ahorro en negativo.
 func (s *FinanceService) DeleteTransaction(ctx context.Context, userID, transactionID domain.ID) error {
+	t, err := s.transactions.GetByID(ctx, userID, transactionID)
+	if err != nil {
+		return fmt.Errorf("eliminar transacción: %w", err)
+	}
+	if err := s.ensureSavingsCovered(ctx, userID, t, nil); err != nil {
+		return fmt.Errorf("eliminar transacción: %w", err)
+	}
 	if err := s.transactions.Delete(ctx, userID, transactionID); err != nil {
 		return fmt.Errorf("eliminar transacción: %w", err)
 	}

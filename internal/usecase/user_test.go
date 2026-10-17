@@ -301,3 +301,41 @@ func TestUserServiceProfile(t *testing.T) {
 		t.Errorf("Profile() de un usuario inexistente: error = %v, se esperaba ErrNotFound", err)
 	}
 }
+
+func TestUserServiceUpdateSavingsGoal(t *testing.T) {
+	ctx := context.Background()
+	cents := func(c int64) *int64 { return &c }
+	existing := existingUser(t, "ana@example.com", "UTC")
+	existing.MonthlySavingsGoalCents = cents(50_000_00)
+
+	tests := []struct {
+		name    string
+		in      PreferencesInput
+		want    *int64
+		wantErr error
+	}{
+		{name: "sin SetSavingsGoal no cambia", in: PreferencesInput{MonthlySavingsGoalCents: cents(1)}, want: cents(50_000_00)},
+		{name: "fija una meta", in: PreferencesInput{SetSavingsGoal: true, MonthlySavingsGoalCents: cents(100_000_00)}, want: cents(100_000_00)},
+		{name: "quita la meta", in: PreferencesInput{SetSavingsGoal: true}, want: nil},
+		{name: "meta cero", in: PreferencesInput{SetSavingsGoal: true, MonthlySavingsGoalCents: cents(0)}, wantErr: domain.ErrInvalidInput},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := newFakeUserRepo(existing)
+			u, err := NewUserService(repo, &stubHasher{}).UpdatePreferences(ctx, existing.ID, tt.in)
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) || repo.updates != 0 {
+					t.Fatalf("error = %v, updates = %d; se esperaba %v sin guardar", err, repo.updates, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("UpdatePreferences() error inesperado: %v", err)
+			}
+			got := u.MonthlySavingsGoalCents
+			if (got == nil) != (tt.want == nil) || (got != nil && *got != *tt.want) {
+				t.Errorf("meta = %v, se esperaba %v", got, tt.want)
+			}
+		})
+	}
+}

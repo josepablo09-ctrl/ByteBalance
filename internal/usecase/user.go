@@ -106,10 +106,15 @@ type PreferencesInput struct {
 	FullName        *string
 	DefaultCurrency *string
 	Timezone        *string
+	// SetSavingsGoal indica si se modifica la meta de ahorro mensual; entonces
+	// MonthlySavingsGoalCents nil la quita.
+	SetSavingsGoal          bool
+	MonthlySavingsGoalCents *int64
 }
 
-// UpdatePreferences modifica el nombre, la moneda por defecto o la zona horaria
-// del usuario. Si algún valor es inválido no se guarda ningún cambio.
+// UpdatePreferences modifica el nombre, la moneda por defecto, la zona horaria
+// o la meta de ahorro mensual del usuario. Si algún valor es inválido no se
+// guarda ningún cambio.
 func (s *UserService) UpdatePreferences(ctx context.Context, userID domain.ID, in PreferencesInput) (*user.User, error) {
 	u, err := s.users.GetByID(ctx, userID)
 	if err != nil {
@@ -127,6 +132,9 @@ func (s *UserService) UpdatePreferences(ctx context.Context, userID domain.ID, i
 	}
 	if in.Timezone != nil {
 		u.Timezone = strings.TrimSpace(*in.Timezone)
+	}
+	if in.SetSavingsGoal {
+		u.MonthlySavingsGoalCents = in.MonthlySavingsGoalCents
 	}
 	if err := u.Validate(); err != nil {
 		return nil, fmt.Errorf("actualizar preferencias: %w", err)
