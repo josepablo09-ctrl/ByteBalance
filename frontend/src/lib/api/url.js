@@ -1,11 +1,17 @@
+/** Hosts en los que se admite http aun en un build de producción (`vite preview`). */
+const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
+
 /**
  * Valida y normaliza la URL base de la API: debe ser http(s) y se devuelve sin
- * barra final para poder concatenar rutas como `/auth/login`.
+ * barra final para poder concatenar rutas como `/auth/login`. Con
+ * `requireHttps` (builds de producción) solo admite http hacia localhost: el
+ * token de sesión nunca debe viajar sin cifrar.
  *
  * @param {string | undefined} raw
+ * @param {{ requireHttps?: boolean }} [options]
  * @returns {string}
  */
-export function normalizeBaseUrl(raw) {
+export function normalizeBaseUrl(raw, { requireHttps = false } = {}) {
 	const value = (raw ?? '').trim();
 	if (!value) {
 		throw new Error('VITE_API_URL no está definida: copia frontend/.env.example a frontend/.env');
@@ -18,6 +24,9 @@ export function normalizeBaseUrl(raw) {
 	}
 	if (url.protocol !== 'http:' && url.protocol !== 'https:') {
 		throw new Error(`VITE_API_URL debe usar http o https: ${value}`);
+	}
+	if (requireHttps && url.protocol === 'http:' && !LOCAL_HOSTS.includes(url.hostname)) {
+		throw new Error(`VITE_API_URL debe usar https en producción: ${value}`);
 	}
 	return value.replace(/\/+$/, '');
 }

@@ -19,6 +19,23 @@ describe('normalizeBaseUrl', () => {
 	])('rechaza %j', (raw, message) => {
 		expect(() => normalizeBaseUrl(raw)).toThrow(message);
 	});
+
+	describe('en producción (requireHttps)', () => {
+		it.each([
+			'https://api.bytebalance.com/api/v1',
+			'http://localhost:8080/api/v1',
+			'http://127.0.0.1:8080/api/v1'
+		])('admite %j', (raw) => {
+			expect(normalizeBaseUrl(raw, { requireHttps: true })).toBe(raw);
+		});
+
+		it.each(['http://api.bytebalance.com/api/v1', 'http://localhost.evil.com/api/v1'])(
+			'rechaza http remoto %j',
+			(raw) => {
+				expect(() => normalizeBaseUrl(raw, { requireHttps: true })).toThrow(/https en producción/);
+			}
+		);
+	});
 });
 
 describe('buildUrl', () => {
