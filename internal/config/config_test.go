@@ -14,6 +14,8 @@ const (
 	jwtSecret = "0123456789abcdef0123456789abcdef"
 	// telegramToken tiene el formato de BotFather pero es ficticio.
 	telegramToken = "123456789:AAFicticioFicticioFicticioFicticio12"
+	// geminiKey tiene el formato de Google AI Studio pero es ficticia.
+	geminiKey = "AIzaFicticiaFicticiaFicticiaFicticia00"
 )
 
 func lookupFrom(vars map[string]string) func(string) (string, bool) {
@@ -153,6 +155,42 @@ func TestParse(t *testing.T) {
 			wantErr: []string{"TELEGRAM_API_URL", "https"},
 		},
 		{
+			name: "con llave de Gemini",
+			vars: map[string]string{"DATABASE_URL": localDB, "JWT_SECRET": jwtSecret, "GEMINI_API_KEY": " " + geminiKey + " "},
+			want: Config{Env: EnvDevelopment, Port: 8080, DatabaseURL: localDB, JWTSecret: jwtSecret, GeminiAPIKey: geminiKey},
+		},
+		{
+			name: "llave de Gemini con formato AQ y modelo propio",
+			vars: map[string]string{"DATABASE_URL": localDB, "JWT_SECRET": jwtSecret, "GEMINI_API_KEY": "AQ.Ficticia_Ficticia-Ficticia_Ficticia-Ficticia", "GEMINI_MODEL": "gemini-3.8-flash"},
+			want: Config{Env: EnvDevelopment, Port: 8080, DatabaseURL: localDB, JWTSecret: jwtSecret,
+				GeminiAPIKey: "AQ.Ficticia_Ficticia-Ficticia_Ficticia-Ficticia", GeminiModel: "gemini-3.8-flash"},
+		},
+		{
+			name:    "llave de Gemini con el texto de ejemplo",
+			vars:    map[string]string{"DATABASE_URL": localDB, "JWT_SECRET": jwtSecret, "GEMINI_API_KEY": "your-gemini-api-key"},
+			wantErr: []string{"GEMINI_API_KEY"},
+		},
+		{
+			name:    "modelo de Gemini con ruta",
+			vars:    map[string]string{"DATABASE_URL": localDB, "JWT_SECRET": jwtSecret, "GEMINI_MODEL": "../tunedModels/x"},
+			wantErr: []string{"GEMINI_MODEL"},
+		},
+		{
+			name: "API de Gemini simulada en local",
+			vars: map[string]string{"DATABASE_URL": localDB, "JWT_SECRET": jwtSecret, "GEMINI_API_URL": "http://127.0.0.1:8091/"},
+			want: Config{Env: EnvDevelopment, Port: 8080, DatabaseURL: localDB, JWTSecret: jwtSecret, GeminiAPIURL: "http://127.0.0.1:8091"},
+		},
+		{
+			name: "API de Gemini http en staging",
+			vars: map[string]string{
+				"APP_ENV":        "staging",
+				"DATABASE_URL":   "postgres://app:secreto@db.internal:5432/bytebalance?sslmode=require",
+				"JWT_SECRET":     jwtSecret,
+				"GEMINI_API_URL": "http://gemini.internal",
+			},
+			wantErr: []string{"GEMINI_API_URL", "https"},
+		},
+		{
 			name:    "TRUSTED_PROXY_HOPS no numérico",
 			vars:    map[string]string{"DATABASE_URL": localDB, "JWT_SECRET": jwtSecret, "TRUSTED_PROXY_HOPS": "alb"},
 			wantErr: []string{"TRUSTED_PROXY_HOPS"},
@@ -178,6 +216,12 @@ func TestParse(t *testing.T) {
 			if tt.want.TelegramAPIURL == "" {
 				tt.want.TelegramAPIURL = defaultTelegramAPIURL
 			}
+			if tt.want.GeminiModel == "" {
+				tt.want.GeminiModel = defaultGeminiModel
+			}
+			if tt.want.GeminiAPIURL == "" {
+				tt.want.GeminiAPIURL = defaultGeminiAPIURL
+			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("parse() = %+v, se esperaba %+v", got, tt.want)
 			}
@@ -191,11 +235,12 @@ func TestParseNeverLeaksSecrets(t *testing.T) {
 		"DATABASE_URL":       "postgres://app:superSecreta@db.internal/bytebalance?sslmode=disable",
 		"JWT_SECRET":         "jwtSecretoCorto",
 		"TELEGRAM_BOT_TOKEN": "tokenTelegramSecretoMalFormado",
+		"GEMINI_API_KEY":     "llave gemini secreta con espacios",
 	}))
 	if err == nil {
 		t.Fatal("se esperaba error por falta de TLS y secreto corto")
 	}
-	for _, secret := range []string{"superSecreta", "jwtSecretoCorto", "tokenTelegramSecretoMalFormado"} {
+	for _, secret := range []string{"superSecreta", "jwtSecretoCorto", "tokenTelegramSecretoMalFormado", "gemini secreta"} {
 		if strings.Contains(err.Error(), secret) {
 			t.Fatalf("el error expone un secreto (%s): %v", secret, err)
 		}

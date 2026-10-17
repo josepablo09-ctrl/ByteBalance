@@ -30,6 +30,10 @@ const (
 	maxTrustedProxyHops = 10
 	// defaultTelegramAPIURL es la URL de la Bot API oficial.
 	defaultTelegramAPIURL = "https://api.telegram.org"
+	// defaultGeminiAPIURL es la URL de la API de Gemini (Google AI Studio).
+	defaultGeminiAPIURL = "https://generativelanguage.googleapis.com"
+	// defaultGeminiModel es un modelo rápido, adecuado para una petición interactiva.
+	defaultGeminiModel = "gemini-3.5-flash"
 )
 
 // sslmodes que cifran la conexión; obligatorios fuera de desarrollo.
@@ -37,6 +41,14 @@ var secureSSLModes = []string{"require", "verify-ca", "verify-full"}
 
 // telegramTokenPattern es el formato de los tokens de BotFather: <id numérico>:<clave>.
 var telegramTokenPattern = regexp.MustCompile(`^[0-9]{5,}:[A-Za-z0-9_-]{30,}$`)
+
+// geminiKeyPattern admite los formatos de llave de Google AI Studio ("AIza…"
+// y "AQ.…"). Descarta espacios y textos de ejemplo cortos.
+var geminiKeyPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{30,}$`)
+
+// geminiModelPattern es un nombre de modelo (p. ej. gemini-3.5-flash). Forma
+// parte de la ruta de la URL, así que no admite "/" ni otros separadores.
+var geminiModelPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{0,63}$`)
 
 // Config es la configuración validada de la aplicación.
 type Config struct {
@@ -67,11 +79,25 @@ type Config struct {
 	// defecto la oficial; se cambia para usar un servidor propio de la Bot API
 	// o uno simulado en pruebas locales.
 	TelegramAPIURL string
+	// GeminiAPIKey es la llave de Google Gemini API (GEMINI_API_KEY). Vacía
+	// desactiva el análisis con IA. Es un secreto: nunca debe registrarse en
+	// logs ni llegar al frontend.
+	GeminiAPIKey string
+	// GeminiModel es el modelo de Gemini que genera los análisis (GEMINI_MODEL).
+	GeminiModel string
+	// GeminiAPIURL es la URL base de la API de Gemini (GEMINI_API_URL). Por
+	// defecto la oficial; se cambia para usar un servidor simulado en local.
+	GeminiAPIURL string
 }
 
 // TelegramEnabled indica si hay un bot de Telegram configurado.
 func (c Config) TelegramEnabled() bool {
 	return c.TelegramBotToken != ""
+}
+
+// GeminiEnabled indica si hay una llave de Gemini configurada.
+func (c Config) GeminiEnabled() bool {
+	return c.GeminiAPIKey != ""
 }
 
 // IsDevelopment indica si la aplicación corre en el entorno local de desarrollo.
@@ -167,11 +193,32 @@ func parse(lookup func(string) (string, bool)) (Config, error) {
 	}
 	cfg.TelegramAPIURL = defaultTelegramAPIURL
 	if raw := strings.TrimSpace(get("TELEGRAM_API_URL")); raw != "" {
-		apiURL, err := parseTelegramAPIURL(raw, cfg.Env)
+		apiURL, err := parseAPIURL("TELEGRAM_API_URL", raw, cfg.Env)
 		if err != nil {
 			errs = append(errs, err)
 		}
 		cfg.TelegramAPIURL = apiURL
+	}
+
+	cfg.GeminiAPIKey = strings.TrimSpace(get("GEMINI_API_KEY"))
+	// No se incluye el valor en el mensaje: es un secreto.
+	if cfg.GeminiAPIKey != "" && !geminiKeyPattern.MatchString(cfg.GeminiAPIKey) {
+		errs = append(errs, errors.New("GEMINI_API_KEY no tiene el formato de una llave de Google AI Studio; déjala vacía para desactivar el análisis con IA"))
+	}
+	cfg.GeminiModel = defaultGeminiModel
+	if raw := strings.TrimSpace(get("GEMINI_MODEL")); raw != "" {
+		if !geminiModelPattern.MatchString(raw) {
+			errs = append(errs, fmt.Errorf("GEMINI_MODEL %q no es un nombre de modelo válido (p. ej. %s)", raw, defaultGeminiModel))
+		}
+		cfg.GeminiModel = raw
+	}
+	cfg.GeminiAPIURL = defaultGeminiAPIURL
+	if raw := strings.TrimSpace(get("GEMINI_API_URL")); raw != "" {
+		apiURL, err := parseAPIURL("GEMINI_API_URL", raw, cfg.Env)
+		if err != nil {
+			errs = append(errs, err)
+		}
+		cfg.GeminiAPIURL = apiURL
 	}
 
 	// No se incluye el valor en el mensaje: es un secreto.
@@ -185,16 +232,17 @@ func parse(lookup func(string) (string, bool)) (Config, error) {
 	return cfg, nil
 }
 
-// parseTelegramAPIURL valida TELEGRAM_API_URL: https, o http solo hacia
-// localhost en desarrollo (servidores simulados). Se devuelve sin barra final.
-func parseTelegramAPIURL(raw, env string) (string, error) {
+// parseAPIURL valida la URL base de una API externa (variable name): https, o
+// http solo hacia localhost en desarrollo (servidores simulados). Se devuelve
+// sin barra final.
+func parseAPIURL(name, raw, env string) (string, error) {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
-		return "", fmt.Errorf("TELEGRAM_API_URL %q no es una URL http(s) válida", raw)
+		return "", fmt.Errorf("%s %q no es una URL http(s) válida", name, raw)
 	}
 	isLocal := u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1"
 	if u.Scheme == "http" && !(env == EnvDevelopment && isLocal) {
-		return "", fmt.Errorf("TELEGRAM_API_URL debe usar https (http solo hacia localhost en development)")
+		return "", fmt.Errorf("%s debe usar https (http solo hacia localhost en development)", name)
 	}
 	return strings.TrimRight(raw, "/"), nil
 }

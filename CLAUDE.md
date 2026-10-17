@@ -130,7 +130,9 @@ POSTGRES_DB=bytebalance
 POSTGRES_PORT=5432
 DATABASE_URL=postgres://user:password@localhost:5432/bytebalance?sslmode=disable
 JWT_SECRET=                      # Obligatoria, mín. 32 bytes (openssl rand -base64 48)
-GEMINI_API_KEY=
+GEMINI_API_KEY=                  # Opcional: llave de Google AI Studio; vacía desactiva el análisis con IA
+GEMINI_MODEL=                    # Opcional: modelo de Gemini (por defecto gemini-3.5-flash)
+GEMINI_API_URL=                  # Opcional: API de Gemini simulada (por defecto la oficial)
 TELEGRAM_BOT_TOKEN=              # Opcional: token de @BotFather; vacío desactiva Telegram
 TELEGRAM_API_URL=                # Opcional: Bot API propia o simulada (por defecto la oficial)
 ```
