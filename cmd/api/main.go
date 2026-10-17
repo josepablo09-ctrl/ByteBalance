@@ -125,6 +125,8 @@ func newApp(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) (app, er
 	a.handler = httpdelivery.NewRouter(services, httpdelivery.Options{
 		AllowedOrigins:   cfg.CORSAllowedOrigins,
 		TrustedProxyHops: cfg.TrustedProxyHops,
+		// Fuera de desarrollo la API se sirve por HTTPS (CORS_ALLOWED_ORIGINS ya lo exige).
+		HSTS: !cfg.IsDevelopment(),
 	})
 	return a, nil
 }

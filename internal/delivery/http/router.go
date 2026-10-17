@@ -72,6 +72,9 @@ type Options struct {
 	// (p. ej. 1 detrás de un ALB). Con 0 se ignora X-Forwarded-For y la IP del
 	// cliente es la de la conexión.
 	TrustedProxyHops int
+	// HSTS activa Strict-Transport-Security. Solo debe usarse cuando la API se
+	// sirve por HTTPS (en producción, detrás de un ALB o App Runner).
+	HSTS bool
 }
 
 // api contiene los handlers REST; cada método atiende un endpoint.
@@ -129,7 +132,7 @@ func NewRouter(s Services, opts Options) http.Handler {
 	mux.Handle("GET /api/v1/ai", protected(a.aiStatus))
 	mux.Handle("POST /api/v1/ai/diagnose", protected(a.diagnose))
 
-	return recoverPanics(cors(opts.AllowedOrigins, mux))
+	return recoverPanics(securityHeaders(opts.HSTS, cors(opts.AllowedOrigins, mux)))
 }
 
 // recoverPanics convierte un panic en un handler en una respuesta 500 en lugar
