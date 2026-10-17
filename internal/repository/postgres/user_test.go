@@ -81,3 +81,41 @@ func TestUserRepository(t *testing.T) {
 		}
 	})
 }
+
+func TestUserRepositorySavingsGoal(t *testing.T) {
+	ctx := context.Background()
+	tx := testTx(t)
+	repo := NewUserRepository(tx)
+	u := createTestUser(t, tx)
+
+	if got, err := repo.GetByID(ctx, u.ID); err != nil || got.MonthlySavingsGoalCents != nil {
+		t.Fatalf("un usuario nuevo no debe tener meta: %+v, %v", got, err)
+	}
+
+	goal := int64(123_456_78)
+	u.MonthlySavingsGoalCents = &goal
+	if err := repo.Update(ctx, u); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	got, err := repo.GetByID(ctx, u.ID)
+	if err != nil || got.MonthlySavingsGoalCents == nil || *got.MonthlySavingsGoalCents != goal {
+		t.Fatalf("meta leída = %v (%v), se esperaba %d", got.MonthlySavingsGoalCents, err, goal)
+	}
+
+	u.MonthlySavingsGoalCents = nil
+	if err := repo.Update(ctx, u); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if got, err := repo.GetByID(ctx, u.ID); err != nil || got.MonthlySavingsGoalCents != nil {
+		t.Fatalf("la meta debía quitarse: %v, %v", got.MonthlySavingsGoalCents, err)
+	}
+
+	t.Run("la base rechaza una meta no positiva", func(t *testing.T) {
+		expectErrInSavepoint(t, tx, domain.ErrInvalidInput, func(db DBTX) error {
+			bad := *u
+			zero := int64(0)
+			bad.MonthlySavingsGoalCents = &zero
+			return NewUserRepository(db).Update(ctx, &bad)
+		})
+	})
+}

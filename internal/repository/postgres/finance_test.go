@@ -214,3 +214,43 @@ func TestTransactionRepository(t *testing.T) {
 		}
 	})
 }
+
+func TestTransactionRepositorySavings(t *testing.T) {
+	ctx := context.Background()
+	tx := testTx(t)
+	repo := NewTransactionRepository(tx)
+	owner := createTestUser(t, tx)
+
+	food := &finance.Category{UserID: owner.ID, Name: "Comida", Type: finance.Expense}
+	if err := NewCategoryRepository(tx).Create(ctx, food); err != nil {
+		t.Fatalf("crear categoría: %v", err)
+	}
+	at := time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)
+	for _, typ := range []finance.EntryType{finance.Saving, finance.Withdrawal} {
+		txn, err := finance.NewTransaction(finance.TransactionParams{
+			UserID: owner.ID, Type: typ, Amount: finance.Money{Cents: 50_000_00, Currency: "CRC"}, OccurredAt: at,
+		})
+		if err != nil {
+			t.Fatalf("NewTransaction(%s): %v", typ, err)
+		}
+		if err := repo.Create(ctx, txn); err != nil {
+			t.Fatalf("Create(%s): %v", typ, err)
+		}
+	}
+
+	savings, err := repo.List(ctx, owner.ID, finance.TransactionFilter{Type: finance.Saving})
+	if err != nil || len(savings) != 1 || savings[0].Type != finance.Saving || savings[0].Amount.Cents != 50_000_00 {
+		t.Fatalf("List(saving) = %+v, %v", savings, err)
+	}
+
+	t.Run("la base rechaza un movimiento de ahorro con categoría", func(t *testing.T) {
+		expectErrInSavepoint(t, tx, domain.ErrInvalidInput, func(db DBTX) error {
+			// Se salta la validación del dominio para comprobar la restricción de la base.
+			bad := &finance.Transaction{
+				UserID: owner.ID, Type: finance.Saving, CategoryID: &food.ID,
+				Amount: finance.Money{Cents: 100, Currency: "CRC"}, OccurredAt: at,
+			}
+			return NewTransactionRepository(db).Create(ctx, bad)
+		})
+	})
+}

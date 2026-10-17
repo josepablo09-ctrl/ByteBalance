@@ -23,7 +23,7 @@ func NewUserRepository(db DBTX) *UserRepository {
 }
 
 const userColumns = `id, email, password_hash, full_name, default_currency, timezone,
-	telegram_chat_id, created_at, updated_at, deleted_at`
+	telegram_chat_id, (monthly_savings_goal * 100)::bigint, created_at, updated_at, deleted_at`
 
 func scanUser(row pgx.Row) (*user.User, error) {
 	var (
@@ -31,7 +31,7 @@ func scanUser(row pgx.Row) (*user.User, error) {
 		currency string
 	)
 	err := row.Scan(uuidDst(&u.ID), &u.Email, &u.PasswordHash, &u.FullName, &currency, &u.Timezone,
-		&u.TelegramChatID, &u.CreatedAt, &u.UpdatedAt, &u.DeletedAt)
+		&u.TelegramChatID, &u.MonthlySavingsGoalCents, &u.CreatedAt, &u.UpdatedAt, &u.DeletedAt)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -85,10 +85,11 @@ func (r *UserRepository) GetByTelegramChatID(ctx context.Context, chatID int64) 
 // Update guarda los cambios de u y actualiza UpdatedAt.
 func (r *UserRepository) Update(ctx context.Context, u *user.User) error {
 	const q = `UPDATE users
-		SET email = $2, password_hash = $3, full_name = $4, default_currency = $5, timezone = $6, telegram_chat_id = $7
+		SET email = $2, password_hash = $3, full_name = $4, default_currency = $5, timezone = $6, telegram_chat_id = $7,
+			monthly_savings_goal = $8::numeric / 100
 		WHERE id = $1 AND deleted_at IS NULL
 		RETURNING updated_at`
-	err := r.db.QueryRow(ctx, q, uuidArg(u.ID), u.Email, u.PasswordHash, u.FullName, string(u.DefaultCurrency), u.Timezone, u.TelegramChatID).
+	err := r.db.QueryRow(ctx, q, uuidArg(u.ID), u.Email, u.PasswordHash, u.FullName, string(u.DefaultCurrency), u.Timezone, u.TelegramChatID, u.MonthlySavingsGoalCents).
 		Scan(&u.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("actualizar usuario: %w", mapError(err))

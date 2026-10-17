@@ -54,6 +54,8 @@ func TestNewCategory(t *testing.T) {
 		{name: "nombre vacío", userID: userA, catName: "  ", catType: Expense, wantErr: true},
 		{name: "nombre demasiado largo", userID: userA, catName: strings.Repeat("x", 81), catType: Expense, wantErr: true},
 		{name: "tipo inválido", userID: userA, catName: "Comida", catType: "transfer", wantErr: true},
+		{name: "el ahorro no admite categorías", userID: userA, catName: "Viaje", catType: Saving, wantErr: true},
+		{name: "los retiros no admiten categorías", userID: userA, catName: "Viaje", catType: Withdrawal, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -88,6 +90,13 @@ func TestNewTransaction(t *testing.T) {
 		{name: "válida con categoría", modify: func(p *TransactionParams) { p.Category = food }},
 		{name: "sin usuario", modify: func(p *TransactionParams) { p.UserID = domain.ID{} }, wantErr: domain.ErrInvalidInput},
 		{name: "tipo inválido", modify: func(p *TransactionParams) { p.Type = "x" }, wantErr: domain.ErrInvalidInput},
+		{name: "aporte al ahorro", modify: func(p *TransactionParams) { p.Type = Saving }},
+		{name: "retiro del ahorro", modify: func(p *TransactionParams) { p.Type = Withdrawal }},
+		{
+			name:    "ahorro con categoría",
+			modify:  func(p *TransactionParams) { p.Type = Saving; p.Category = food },
+			wantErr: domain.ErrInvalidInput,
+		},
 		{name: "monto cero", modify: func(p *TransactionParams) { p.Amount.Cents = 0 }, wantErr: domain.ErrInvalidInput},
 		{name: "sin fecha", modify: func(p *TransactionParams) { p.OccurredAt = time.Time{} }, wantErr: domain.ErrInvalidInput},
 		{name: "descripción larga", modify: func(p *TransactionParams) { p.Description = strings.Repeat("a", 256) }, wantErr: domain.ErrInvalidInput},
@@ -153,6 +162,8 @@ func TestSignedCents(t *testing.T) {
 	}{
 		{name: "ingreso positivo", typ: Income, cents: 500, want: 500},
 		{name: "gasto negativo", typ: Expense, cents: 500, want: -500},
+		{name: "ahorro no cambia el balance", typ: Saving, cents: 500, want: 0},
+		{name: "retiro no cambia el balance", typ: Withdrawal, cents: 500, want: 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -161,5 +172,24 @@ func TestSignedCents(t *testing.T) {
 				t.Errorf("SignedCents() = %d, se esperaba %d", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestEntryTypeKinds(t *testing.T) {
+	tests := []struct {
+		typ                                 EntryType
+		valid, categorizable, isSavingsType bool
+	}{
+		{Income, true, true, false},
+		{Expense, true, true, false},
+		{Saving, true, false, true},
+		{Withdrawal, true, false, true},
+		{"transfer", false, false, false},
+		{"", false, false, false},
+	}
+	for _, tt := range tests {
+		if tt.typ.Valid() != tt.valid || tt.typ.Categorizable() != tt.categorizable || tt.typ.IsSavings() != tt.isSavingsType {
+			t.Errorf("%q: Valid=%v Categorizable=%v IsSavings=%v", tt.typ, tt.typ.Valid(), tt.typ.Categorizable(), tt.typ.IsSavings())
+		}
 	}
 }

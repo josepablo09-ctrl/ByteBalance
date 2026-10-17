@@ -39,8 +39,8 @@ func (c *Category) Validate() error {
 	if c.Name == "" || utf8.RuneCountInString(c.Name) > maxCategoryNameLen {
 		return fmt.Errorf("%w: el nombre de la categoría es obligatorio y admite hasta %d caracteres", domain.ErrInvalidInput, maxCategoryNameLen)
 	}
-	if !c.Type.Valid() {
-		return fmt.Errorf("%w: tipo de categoría %q inválido", domain.ErrInvalidInput, c.Type)
+	if !c.Type.Categorizable() {
+		return fmt.Errorf("%w: tipo de categoría %q inválido (usar income o expense)", domain.ErrInvalidInput, c.Type)
 	}
 	return nil
 }

@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"bytebalance/internal/domain"
+	"bytebalance/internal/domain/finance"
 )
 
 // Límites alineados con las columnas de la tabla users.
@@ -29,9 +30,12 @@ type User struct {
 	Timezone        string
 	// TelegramChatID es nil mientras el usuario no haya vinculado su cuenta de Telegram.
 	TelegramChatID *int64
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	DeletedAt      *time.Time
+	// MonthlySavingsGoalCents es la meta de ahorro mensual, en centavos de
+	// DefaultCurrency; nil si el usuario no fijó una.
+	MonthlySavingsGoalCents *int64
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
+	DeletedAt               *time.Time
 }
 
 // Params agrupa los datos necesarios para crear un User.
@@ -86,6 +90,9 @@ func (u *User) Validate() error {
 	}
 	if _, err := time.LoadLocation(u.Timezone); err != nil {
 		return fmt.Errorf("%w: zona horaria %q desconocida", domain.ErrInvalidInput, u.Timezone)
+	}
+	if g := u.MonthlySavingsGoalCents; g != nil && (*g <= 0 || *g > finance.MaxCents) {
+		return fmt.Errorf("%w: la meta de ahorro debe ser mayor que cero y no superar %d centavos", domain.ErrInvalidInput, finance.MaxCents)
 	}
 	return nil
 }

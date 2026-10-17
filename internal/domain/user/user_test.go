@@ -123,3 +123,32 @@ func TestNewLinkCode(t *testing.T) {
 		t.Errorf("sin usuario: error = %v, se esperaba ErrInvalidInput", err)
 	}
 }
+
+func TestValidateSavingsGoal(t *testing.T) {
+	cents := func(c int64) *int64 { return &c }
+	tests := []struct {
+		name    string
+		goal    *int64
+		wantErr bool
+	}{
+		{name: "sin meta", goal: nil},
+		{name: "meta válida", goal: cents(100_000_00)},
+		{name: "meta máxima", goal: cents(99_999_999_999_999)},
+		{name: "meta cero", goal: cents(0), wantErr: true},
+		{name: "meta negativa", goal: cents(-1), wantErr: true},
+		{name: "meta que no cabe en NUMERIC(14,2)", goal: cents(100_000_000_000_000), wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			u, err := New(validParams())
+			if err != nil {
+				t.Fatalf("New() error inesperado: %v", err)
+			}
+			u.MonthlySavingsGoalCents = tt.goal
+			err = u.Validate()
+			if tt.wantErr != errors.Is(err, domain.ErrInvalidInput) || (!tt.wantErr && err != nil) {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}

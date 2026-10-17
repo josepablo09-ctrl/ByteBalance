@@ -74,6 +74,9 @@ func (t *Transaction) Validate() error {
 	if t.OccurredAt.IsZero() {
 		return fmt.Errorf("%w: falta la fecha de la transacción", domain.ErrInvalidInput)
 	}
+	if t.CategoryID != nil && !t.Type.Categorizable() {
+		return fmt.Errorf("%w: los movimientos de ahorro no llevan categoría", domain.ErrInvalidInput)
+	}
 	return nil
 }
 
@@ -101,11 +104,16 @@ func (t *Transaction) ClearCategory() {
 	t.CategoryID = nil
 }
 
-// SignedCents devuelve el monto con signo: positivo para ingresos y negativo
-// para gastos, útil para calcular balances.
+// SignedCents devuelve el efecto de la transacción en el balance total:
+// positivo para ingresos, negativo para gastos y cero para los movimientos de
+// ahorro, que no cambian el balance (ver Balance.AvailableCents).
 func (t *Transaction) SignedCents() int64 {
-	if t.Type == Expense {
+	switch t.Type {
+	case Income:
+		return t.Amount.Cents
+	case Expense:
 		return -t.Amount.Cents
+	default:
+		return 0
 	}
-	return t.Amount.Cents
 }

@@ -7,16 +7,31 @@ import (
 	"bytebalance/internal/domain"
 )
 
-// Balance resume los ingresos y gastos de una moneda.
+// Balance resume los movimientos de una moneda.
 type Balance struct {
 	Currency     domain.Currency
 	IncomeCents  int64
 	ExpenseCents int64
+	// SavedCents y WithdrawnCents son lo apartado al ahorro y lo retirado de él.
+	SavedCents     int64
+	WithdrawnCents int64
 }
 
-// NetCents devuelve ingresos menos gastos.
+// NetCents devuelve el balance total: ingresos menos gastos. El ahorro no lo
+// cambia, porque el dinero apartado sigue siendo del usuario.
 func (b Balance) NetCents() int64 {
 	return b.IncomeCents - b.ExpenseCents
+}
+
+// SavingsCents devuelve el ahorro neto: lo apartado menos lo retirado.
+func (b Balance) SavingsCents() int64 {
+	return b.SavedCents - b.WithdrawnCents
+}
+
+// AvailableCents devuelve el disponible real para gastar: el balance total
+// menos el dinero apartado en el ahorro.
+func (b Balance) AvailableCents() int64 {
+	return b.NetCents() - b.SavingsCents()
 }
 
 // Summarize agrupa las transacciones por moneda y devuelve un Balance por cada
@@ -35,6 +50,10 @@ func Summarize(transactions []Transaction) []Balance {
 			b.IncomeCents += t.Amount.Cents
 		case Expense:
 			b.ExpenseCents += t.Amount.Cents
+		case Saving:
+			b.SavedCents += t.Amount.Cents
+		case Withdrawal:
+			b.WithdrawnCents += t.Amount.Cents
 		}
 	}
 
