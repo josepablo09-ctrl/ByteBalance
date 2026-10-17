@@ -63,11 +63,18 @@ func newTransactionResponse(t finance.Transaction) transactionResponse {
 	}
 }
 
+// balanceResponse resume una moneda. net_cents es el balance total (ingresos -
+// gastos); savings_cents, lo apartado menos lo retirado; available_cents, el
+// disponible real para gastar (net_cents - savings_cents).
 type balanceResponse struct {
-	Currency     domain.Currency `json:"currency"`
-	IncomeCents  int64           `json:"income_cents"`
-	ExpenseCents int64           `json:"expense_cents"`
-	NetCents     int64           `json:"net_cents"`
+	Currency       domain.Currency `json:"currency"`
+	IncomeCents    int64           `json:"income_cents"`
+	ExpenseCents   int64           `json:"expense_cents"`
+	NetCents       int64           `json:"net_cents"`
+	SavedCents     int64           `json:"saved_cents"`
+	WithdrawnCents int64           `json:"withdrawn_cents"`
+	SavingsCents   int64           `json:"savings_cents"`
+	AvailableCents int64           `json:"available_cents"`
 }
 
 // createCategory atiende POST /api/v1/categories.
@@ -200,10 +207,14 @@ func (a *api) balance(w http.ResponseWriter, r *http.Request) {
 	resp := make([]balanceResponse, 0, len(balances))
 	for _, b := range balances {
 		resp = append(resp, balanceResponse{
-			Currency:     b.Currency,
-			IncomeCents:  b.IncomeCents,
-			ExpenseCents: b.ExpenseCents,
-			NetCents:     b.NetCents(),
+			Currency:       b.Currency,
+			IncomeCents:    b.IncomeCents,
+			ExpenseCents:   b.ExpenseCents,
+			NetCents:       b.NetCents(),
+			SavedCents:     b.SavedCents,
+			WithdrawnCents: b.WithdrawnCents,
+			SavingsCents:   b.SavingsCents(),
+			AvailableCents: b.AvailableCents(),
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"balances": resp})

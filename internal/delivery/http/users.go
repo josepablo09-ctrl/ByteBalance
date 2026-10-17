@@ -1,6 +1,7 @@
 package http
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -23,11 +24,14 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
-// preferencesRequest usa punteros para distinguir "no enviado" de "vacío".
+// preferencesRequest usa punteros para distinguir "no enviado" de "vacío". La meta
+// de ahorro se lee en crudo para distinguir además "no enviada" (no cambia) de
+// null (la quita).
 type preferencesRequest struct {
-	FullName        *string `json:"full_name"`
-	DefaultCurrency *string `json:"default_currency"`
-	Timezone        *string `json:"timezone"`
+	FullName                *string         `json:"full_name"`
+	DefaultCurrency         *string         `json:"default_currency"`
+	Timezone                *string         `json:"timezone"`
+	MonthlySavingsGoalCents json.RawMessage `json:"monthly_savings_goal_cents"`
 }
 
 // userResponse nunca incluye el hash de la contraseña ni el chat de Telegram.
@@ -38,18 +42,21 @@ type userResponse struct {
 	DefaultCurrency domain.Currency `json:"default_currency"`
 	Timezone        string          `json:"timezone"`
 	TelegramLinked  bool            `json:"telegram_linked"`
-	CreatedAt       time.Time       `json:"created_at"`
+	// MonthlySavingsGoalCents es null si el usuario no fijó una meta.
+	MonthlySavingsGoalCents *int64    `json:"monthly_savings_goal_cents"`
+	CreatedAt               time.Time `json:"created_at"`
 }
 
 func newUserResponse(u *user.User) userResponse {
 	return userResponse{
-		ID:              u.ID,
-		Email:           u.Email,
-		FullName:        u.FullName,
-		DefaultCurrency: u.DefaultCurrency,
-		Timezone:        u.Timezone,
-		TelegramLinked:  u.HasTelegram(),
-		CreatedAt:       u.CreatedAt,
+		ID:                      u.ID,
+		Email:                   u.Email,
+		FullName:                u.FullName,
+		DefaultCurrency:         u.DefaultCurrency,
+		Timezone:                u.Timezone,
+		TelegramLinked:          u.HasTelegram(),
+		MonthlySavingsGoalCents: u.MonthlySavingsGoalCents,
+		CreatedAt:               u.CreatedAt,
 	}
 }
 
@@ -127,16 +134,28 @@ func (a *api) updatePreferences(w http.ResponseWriter, r *http.Request) {
 		respondError(w, r, err)
 		return
 	}
-	if req.FullName == nil && req.DefaultCurrency == nil && req.Timezone == nil {
-		respondError(w, r, badRequest("indica al menos uno de: full_name, default_currency, timezone"))
-		return
-	}
-
-	u, err := a.Users.UpdatePreferences(r.Context(), userIDFrom(r), usecase.PreferencesInput{
+	in := usecase.PreferencesInput{
 		FullName:        req.FullName,
 		DefaultCurrency: req.DefaultCurrency,
 		Timezone:        req.Timezone,
-	})
+	}
+	if len(req.MonthlySavingsGoalCents) > 0 {
+		in.SetSavingsGoal = true
+		if string(req.MonthlySavingsGoalCents) != "null" {
+			var goal int64
+			if err := json.Unmarshal(req.MonthlySavingsGoalCents, &goal); err != nil {
+				respondError(w, r, badRequest("monthly_savings_goal_cents debe ser un entero de centavos o null"))
+				return
+			}
+			in.MonthlySavingsGoalCents = &goal
+		}
+	}
+	if in == (usecase.PreferencesInput{}) {
+		respondError(w, r, badRequest("indica al menos uno de: full_name, default_currency, timezone, monthly_savings_goal_cents"))
+		return
+	}
+
+	u, err := a.Users.UpdatePreferences(r.Context(), userIDFrom(r), in)
 	if err != nil {
 		respondError(w, r, err)
 		return

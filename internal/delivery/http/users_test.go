@@ -148,6 +148,30 @@ func TestUpdatePreferences(t *testing.T) {
 		},
 		{name: "sin campos", body: `{}`, wantStatus: http.StatusBadRequest},
 		{name: "solo nulos", body: `{"timezone":null}`, wantStatus: http.StatusBadRequest},
+		{
+			name: "fija la meta de ahorro",
+			body: `{"monthly_savings_goal_cents":10000000}`,
+			updateFn: func(_ domain.ID, in usecase.PreferencesInput) (*user.User, error) {
+				if !in.SetSavingsGoal || in.MonthlySavingsGoalCents == nil || *in.MonthlySavingsGoalCents != 10000000 || in.Timezone != nil {
+					t.Errorf("PreferencesInput = %+v", in)
+				}
+				return sampleUser(), nil
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name: "null quita la meta de ahorro",
+			body: `{"monthly_savings_goal_cents":null}`,
+			updateFn: func(_ domain.ID, in usecase.PreferencesInput) (*user.User, error) {
+				if !in.SetSavingsGoal || in.MonthlySavingsGoalCents != nil {
+					t.Errorf("PreferencesInput = %+v", in)
+				}
+				return sampleUser(), nil
+			},
+			wantStatus: http.StatusOK,
+		},
+		{name: "meta que no es entero", body: `{"monthly_savings_goal_cents":"mucho"}`, wantStatus: http.StatusBadRequest},
+		{name: "meta con decimales", body: `{"monthly_savings_goal_cents":10.5}`, wantStatus: http.StatusBadRequest},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -195,6 +219,10 @@ func TestProfile(t *testing.T) {
 			body := decodeJSONBody(t, rec)
 			if body["id"] != testUserID.String() || body["email"] != "ana@example.com" || body["timezone"] != "America/Costa_Rica" {
 				t.Errorf("respuesta = %v", body)
+			}
+			// Sin meta, el campo se envía como null (no se omite).
+			if goal, ok := body["monthly_savings_goal_cents"]; !ok || goal != nil {
+				t.Errorf("monthly_savings_goal_cents = %v (presente %v), se esperaba null", goal, ok)
 			}
 			if strings.Contains(rec.Body.String(), "hash") {
 				t.Errorf("la respuesta expone el hash de la contraseña: %s", rec.Body.String())

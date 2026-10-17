@@ -185,12 +185,14 @@ func TestBalance(t *testing.T) {
 			if id != testUserID || from.IsZero() || !to.IsZero() {
 				t.Errorf("Balance(%v, %v, %v)", id, from, to)
 			}
-			return []finance.Balance{{Currency: "USD", IncomeCents: 100000, ExpenseCents: 2599}}, nil
+			return []finance.Balance{{Currency: "USD", IncomeCents: 100000, ExpenseCents: 2599, SavedCents: 30000, WithdrawnCents: 5000}}, nil
 		},
 	}})
 	rec := do(h, http.MethodGet, "/api/v1/balance?from=2026-10-01T00:00:00Z", "", true)
 	expectStatus(t, rec, http.StatusOK)
-	want := "{\"balances\":[{\"currency\":\"USD\",\"income_cents\":100000,\"expense_cents\":2599,\"net_cents\":97401}]}\n"
+	// Balance total 97 401; ahorro 25 000; disponible 72 401.
+	want := "{\"balances\":[{\"currency\":\"USD\",\"income_cents\":100000,\"expense_cents\":2599,\"net_cents\":97401," +
+		"\"saved_cents\":30000,\"withdrawn_cents\":5000,\"savings_cents\":25000,\"available_cents\":72401}]}\n"
 	if got := rec.Body.String(); got != want {
 		t.Errorf("body = %s, se esperaba %s", got, want)
 	}
